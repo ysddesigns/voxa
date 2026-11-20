@@ -54,8 +54,9 @@ export default function RootLayout() {
     if (loaded || error) SplashScreen.hideAsync().catch(() => {});
   }, [loaded, error]);
 
-  if (!loaded && !error) return null;
-
+  // Always mount the navigator, even before the fonts load: a deep link that arrives while
+  // nothing is mounted is dropped ("NAVIGATE ... was not handled"). The splash screen stays
+  // up until the fonts are ready, so nothing shows in the fallback font.
   return (
     <VoxaThemeProvider>
       <EngineProvider>
