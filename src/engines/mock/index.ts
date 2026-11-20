@@ -72,7 +72,9 @@ export function createMockEngines(): Engines {
         let stopped = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const tokens = [...text.matchAll(/\S+/g)];
+        let finish: () => void = () => {};
         const done = new Promise<void>((resolve) => {
+          finish = resolve;
           onEvent?.({ type: 'start' });
           let i = 0;
           const next = () => {
@@ -93,6 +95,7 @@ export function createMockEngines(): Engines {
           stop() {
             stopped = true;
             if (timer) clearTimeout(timer);
+            finish();
           },
           done,
         };
