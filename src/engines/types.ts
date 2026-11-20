@@ -34,9 +34,17 @@ export interface SpeakHandle {
   done: Promise<void>;
 }
 
+export interface DownloadHandle {
+  cancel(): void;
+  /** Resolves when the voice is installed; rejects if cancelled or failed. */
+  done: Promise<void>;
+}
+
 export interface VoiceEngine {
   listVoices(): Promise<Voice[]>;
   speak(text: string, options: SpeakOptions, onEvent?: (e: SpeakEvent) => void): SpeakHandle;
+  /** Downloads and installs a voice pack. onProgress gets 0..1. */
+  downloadVoice(id: string, onProgress?: (fraction: number) => void): DownloadHandle;
 }
 
 export type TranscriptSegment = {

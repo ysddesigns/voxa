@@ -21,6 +21,10 @@ export type Palette = {
   tabBar: string;
   tabActiveFill: string;
   shadow: string;
+  /** Background of the word being spoken. */
+  highlight: string;
+  /** Player artwork. */
+  art: string;
 };
 
 export const light: Palette = {
@@ -42,6 +46,8 @@ export const light: Palette = {
   tabBar: '#FFFFFF',
   tabActiveFill: '#FDE3DE',
   shadow: 'rgba(17,17,17,0.14)',
+  highlight: '#FFE1D6',
+  art: '#F58A84',
 };
 
 export const dark: Palette = {
@@ -64,6 +70,8 @@ export const dark: Palette = {
   tabBar: '#1C1C1E',
   tabActiveFill: '#3A2420',
   shadow: 'rgba(0,0,0,0.4)',
+  highlight: '#5A2A1E',
+  art: '#7A3A30',
 };
 
 export const radius = {

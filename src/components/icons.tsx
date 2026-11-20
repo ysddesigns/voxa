@@ -1,4 +1,4 @@
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 /** Voxa's shared custom icon set (PRD: no SF Symbols or Material icons inside screens). */
 export type IconName =
@@ -12,11 +12,35 @@ export type IconName =
   | 'arrow'
   | 'person'
   | 'wave'
-  | 'offline';
+  | 'offline'
+  | 'chevronLeft'
+  | 'chevronDown'
+  | 'more'
+  | 'heart'
+  | 'play'
+  | 'pause'
+  | 'back15'
+  | 'forward15'
+  | 'share'
+  | 'search'
+  | 'download'
+  | 'speaker'
+  | 'lock'
+  | 'check'
+  | 'stop';
 
-type Props = { name: IconName; size?: number; color: string; strokeWidth?: number };
+type Props = {
+  name: IconName;
+  size?: number;
+  color: string;
+  strokeWidth?: number;
+  /** Solid version (heart). play, pause, stop and check are always solid. */
+  filled?: boolean;
+  /** Second colour for marks drawn on a solid shape (the tick in check). */
+  onColor?: string;
+};
 
-export function Icon({ name, size = 22, color, strokeWidth = 2 }: Props) {
+export function Icon({ name, size = 22, color, strokeWidth = 2, filled = false, onColor = '#FFFFFF' }: Props) {
   const common = {
     fill: 'none',
     stroke: color,
@@ -71,6 +95,75 @@ export function Icon({ name, size = 22, color, strokeWidth = 2 }: Props) {
         <>
           <Path d="M3 8.5a13 13 0 0 1 18 0M6 12a8.5 8.5 0 0 1 12 0M9 15.5a4 4 0 0 1 6 0" {...common} />
           <Path d="M4 4l16 16" {...common} />
+        </>
+      )}
+      {name === 'chevronLeft' && <Path d="M15 5l-7 7 7 7" {...common} />}
+      {name === 'chevronDown' && <Path d="M6 9l6 6 6-6" {...common} />}
+      {name === 'more' && (
+        <>
+          <Circle cx={5} cy={12} r={1.8} fill={color} />
+          <Circle cx={12} cy={12} r={1.8} fill={color} />
+          <Circle cx={19} cy={12} r={1.8} fill={color} />
+        </>
+      )}
+      {name === 'heart' && (
+        <Path
+          d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"
+          {...common}
+          fill={filled ? color : 'none'}
+          strokeWidth={filled ? 0 : 1.8}
+        />
+      )}
+      {name === 'play' && <Path d="M8 5.5v13l10.5-6.5z" fill={color} />}
+      {name === 'pause' && (
+        <>
+          <Rect x={6.5} y={5} width={4} height={14} rx={1.2} fill={color} />
+          <Rect x={13.5} y={5} width={4} height={14} rx={1.2} fill={color} />
+        </>
+      )}
+      {name === 'stop' && <Rect x={7} y={7} width={10} height={10} rx={2} fill={color} />}
+      {name === 'back15' && (
+        <>
+          <Path d="M12 4a8 8 0 1 1-7.4 5" {...common} strokeWidth={1.7} />
+          <Path d="M4 4v5h5" {...common} strokeWidth={1.7} />
+          <SvgText x={12.5} y={15.5} fontSize={7} fontWeight="700" textAnchor="middle" fill={color}>
+            15
+          </SvgText>
+        </>
+      )}
+      {name === 'forward15' && (
+        <>
+          <Path d="M12 4a8 8 0 1 0 7.4 5" {...common} strokeWidth={1.7} />
+          <Path d="M20 4v5h-5" {...common} strokeWidth={1.7} />
+          <SvgText x={11.5} y={15.5} fontSize={7} fontWeight="700" textAnchor="middle" fill={color}>
+            15
+          </SvgText>
+        </>
+      )}
+      {name === 'share' && <Path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M7 11H5v9h14v-9h-2" {...common} />}
+      {name === 'search' && (
+        <>
+          <Circle cx={11} cy={11} r={6.5} {...common} />
+          <Path d="M16 16l4.5 4.5" {...common} />
+        </>
+      )}
+      {name === 'download' && (
+        <>
+          <Circle cx={12} cy={12} r={9} {...common} strokeWidth={1.8} />
+          <Path d="M12 7.5v8M8.5 12l3.5 3.5 3.5-3.5" {...common} strokeWidth={1.8} />
+        </>
+      )}
+      {name === 'speaker' && <Path d="M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7" {...common} strokeWidth={1.8} />}
+      {name === 'lock' && (
+        <>
+          <Rect x={5} y={11} width={14} height={9} rx={2} {...common} />
+          <Path d="M8 11V8a4 4 0 0 1 8 0v3" {...common} />
+        </>
+      )}
+      {name === 'check' && (
+        <>
+          <Circle cx={12} cy={12} r={9} fill={color} />
+          <Path d="M8 12.5l2.8 2.8L16.5 9.5" {...common} stroke={onColor} strokeWidth={2.4} />
         </>
       )}
     </Svg>

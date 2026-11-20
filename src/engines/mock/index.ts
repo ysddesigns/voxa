@@ -1,5 +1,7 @@
+import { msPerWord } from '@/features/speak/playback';
 import { quickSummary } from '@/features/summary/quick-summary';
 import type {
+  DownloadHandle,
   Engines,
   ListenEvent,
   ListenSession,
@@ -16,7 +18,11 @@ const VOICES: Voice[] = [
   { id: 'james', name: 'James', tags: ['Deep', 'Male', 'English UK'], sizeMB: 25, variant: 'lite', installed: true },
   { id: 'sophie', name: 'Sophie', tags: ['Warm', 'Female', 'English AU'], sizeMB: 25, variant: 'lite', installed: true },
   { id: 'noah', name: 'Noah', tags: ['Calm', 'Male'], sizeMB: 78, variant: 'full', installed: false },
+  { id: 'ada', name: 'Ada', tags: ['Bright', 'Female'], sizeMB: 81, variant: 'full', installed: false },
 ];
+
+/** Simulated download speed for mock packs (about 3 s for 80 MB). */
+const MOCK_MB_PER_SECOND = 25;
 
 const SCRIPT: { speaker: number; text: string }[] = [
   { speaker: 0, text: 'Thanks everyone. The Q3 plan locks on Friday, so design starts on Monday.' },
@@ -26,12 +32,43 @@ const SCRIPT: { speaker: number; text: string }[] = [
 ];
 
 export function createMockEngines(): Engines {
+  const voices = VOICES.map((v) => ({ ...v }));
   return {
     voice: {
       async listVoices() {
-        return VOICES.map((v) => ({ ...v }));
+        return voices.map((v) => ({ ...v }));
       },
-      speak(text, _options, onEvent?: (e: SpeakEvent) => void): SpeakHandle {
+      downloadVoice(id, onProgress): DownloadHandle {
+        const voice = voices.find((v) => v.id === id);
+        let timer: ReturnType<typeof setInterval> | undefined;
+        let reject: (e: Error) => void = () => {};
+        const done = new Promise<void>((resolve, rej) => {
+          reject = rej;
+          if (!voice) return rej(new Error(`Unknown voice ${id}`));
+          if (voice.installed) return resolve();
+          const stepMs = 100;
+          const total = (voice.sizeMB / MOCK_MB_PER_SECOND) * 1000;
+          let elapsed = 0;
+          timer = setInterval(() => {
+            elapsed += stepMs;
+            const f = Math.min(1, elapsed / total);
+            onProgress?.(f);
+            if (f >= 1) {
+              clearInterval(timer);
+              voice.installed = true;
+              resolve();
+            }
+          }, stepMs);
+        });
+        return {
+          cancel() {
+            if (timer) clearInterval(timer);
+            reject(new Error('cancelled'));
+          },
+          done,
+        };
+      },
+      speak(text, options, onEvent?: (e: SpeakEvent) => void): SpeakHandle {
         let stopped = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const tokens = [...text.matchAll(/\S+/g)];
@@ -48,7 +85,7 @@ export function createMockEngines(): Engines {
             const start = m.index ?? 0;
             onEvent?.({ type: 'word', index: i, charStart: start, charEnd: start + m[0].length });
             i++;
-            timer = setTimeout(next, 260);
+            timer = setTimeout(next, msPerWord(options.rate ?? 1));
           };
           next();
         });

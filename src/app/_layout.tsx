@@ -12,6 +12,8 @@ import {
 } from '@expo-google-fonts/inter';
 import { VoxaThemeProvider, useTheme } from '@/design/theme';
 import { EngineProvider } from '@/engines/provider';
+import { SpeakSessionProvider } from '@/features/speak/speak-session';
+import { VoicesProvider } from '@/features/voices/voices-store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -22,7 +24,17 @@ function Root() {
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="editor" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="editor" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen
+          name="voice-picker"
+          options={{
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.6, 1],
+            sheetGrabberVisible: true,
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        />
       </Stack>
     </>
   );
@@ -46,7 +58,11 @@ export default function RootLayout() {
   return (
     <VoxaThemeProvider>
       <EngineProvider>
-        <Root />
+        <VoicesProvider>
+          <SpeakSessionProvider>
+            <Root />
+          </SpeakSessionProvider>
+        </VoicesProvider>
       </EngineProvider>
     </VoxaThemeProvider>
   );
