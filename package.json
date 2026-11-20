@@ -11,13 +11,15 @@
     "test": "jest",
     "build:android:dev": "eas build -p android --profile development",
     "build:ios:dev": "eas build -p ios --profile development",
-    "build:ios:sim": "eas build -p ios --profile development-simulator"
+    "build:ios:sim": "eas build -p ios --profile development-simulator",
+    "lint": "expo lint"
   },
   "jest": {
     "preset": "jest-expo"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "eslint-config-expo": "~58.0.4",
     "expo": "~58.0.26",
     "expo-build-properties": "~58.0.12",
     "expo-constants": "~58.0.16",
@@ -41,6 +43,7 @@
     "@react-native/jest-preset": "^0.88.1",
     "@types/jest": "30.0.0",
     "@types/react": "~19.3.0",
+    "eslint": "^9.39.5",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.15",
     "typescript": "~6.0.3"
