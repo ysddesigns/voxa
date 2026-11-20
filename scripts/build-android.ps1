@@ -3,14 +3,15 @@
   Builds the Voxa Android app on Windows (see docs/build-guide.md).
 
 .EXAMPLE
-  .\scripts\build-android.ps1                     # debug APK, phones + emulator
-  .\scripts\build-android.ps1 -PhoneOnly          # debug APK, real phones only (no x86_64 emulator code)
-  .\scripts\build-android.ps1 -PhoneOnly -Install # build, then install on the USB-connected phone
-  .\scripts\build-android.ps1 -Release -PhoneOnly # release APK (JS bundled in, no dev server needed)
+  .\scripts\build-android.ps1                     # debug APK for real phones (arm64-v8a, armeabi-v7a)
+  .\scripts\build-android.ps1 -Install            # build, then install on the USB-connected phone
+  .\scripts\build-android.ps1 -Release            # release APK (JS bundled in, no dev server needed)
+  .\scripts\build-android.ps1 -WithEmulator       # also include x86_64 for the Android emulator
   .\scripts\build-android.ps1 -Prebuild           # regenerate android/ first (after app.json or icon changes)
 #>
 param(
-  [switch]$PhoneOnly,
+  [switch]$WithEmulator,
+  [switch]$PhoneOnly,  # kept for old commands; phone-only is now the default
   [switch]$Release,
   [switch]$Install,
   [switch]$Prebuild,
@@ -65,7 +66,7 @@ $sdkFwd = ($Sdk -replace '\\', '/') -replace '^([A-Za-z]):', '$1\:'
 $env:JAVA_HOME = $Jdk
 $env:ANDROID_HOME = $Sdk
 $variant = if ($Release) { 'Release' } else { 'Debug' }
-$archs = if ($PhoneOnly) { 'arm64-v8a,armeabi-v7a' } else { 'arm64-v8a,armeabi-v7a,x86_64' }
+$archs = if ($WithEmulator) { 'arm64-v8a,armeabi-v7a,x86_64' } else { 'arm64-v8a,armeabi-v7a' }
 
 $gradleArgs = @()
 if ($Clean) { $gradleArgs += 'clean' }
