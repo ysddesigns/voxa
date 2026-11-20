@@ -10,7 +10,7 @@
     "backgroundColor": "#FBF4F0",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.voxa",
+      "bundleIdentifier": "com.voxa.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Voxa listens to the room to write a live transcript. Audio stays on this phone.",
         "NSCameraUsageDescription": "Voxa reads printed text with the camera. Photos are never saved."
@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "package": "app.voxa",
+      "package": "com.voxa.app",
       "adaptiveIcon": {
         "backgroundColor": "#FF5A36",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -55,11 +55,7 @@
         {
           "android": {
             "minSdkVersion": 26,
-            "buildArchs": [
-              "arm64-v8a",
-              "armeabi-v7a",
-              "x86_64"
-            ]
+            "buildArchs": ["arm64-v8a", "armeabi-v7a", "x86_64"]
           }
         }
       ]
