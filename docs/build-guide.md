@@ -30,8 +30,8 @@ Written for this Windows PC. Every command below was run on it unless it says **
 
 | Build | What it is | Where | Needs the dev server? |
 |---|---|---|---|
-| **Debug, all architectures** | Dev client for phones and the x86_64 emulator | This PC | Yes (`npm start`) |
-| **Debug, phones only** | Same, without emulator code: smaller and faster to build | This PC | Yes |
+| **Debug (phones only, the default)** | Dev client for real phones, no emulator code | This PC | Yes (`npm start`) |
+| **Debug with emulator** | Same plus x86_64, only if you need the emulator | This PC | Yes |
 | **Release APK** | JavaScript built in, runs on its own. For testers | This PC | No |
 | **Play Store AAB** | Signed bundle for Google Play | EAS cloud (recommended) | No |
 | **iOS dev / simulator / TestFlight** | iPhone builds | EAS cloud only (Windows can't build iOS) | Dev: yes |
@@ -116,6 +116,20 @@ npm ci
 
 The project's `.npmrc` contains `legacy-peer-deps=true`. Keep it: without it, npm refuses to install because of a React version mismatch between Expo's packages. When adding a package, always use `npx expo install <name>` so you get the version that matches this Expo SDK.
 
+### 3.1 Get the on-device engine files (Android)
+
+The on-device voice and listening engine (`modules/voxa-engine`) needs the sherpa-onnx library and three models, about 210 MB to download. They are not in Git. Fetch them once after cloning:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\fetch-engine.ps1
+```
+
+The script downloads into `.engine-cache\` and copies only what the app needs into the module: the phone ABIs (`arm64-v8a`, `armeabi-v7a`), the int8 speech model, the Kitten voice and the English espeak-ng data. Run it again with `-Force` to download fresh copies. After fetching for the first time, build with `-Prebuild` so the module is linked into the app.
+
+Without these files the Android build stops with "modules/voxa-engine is missing sherpa-onnx". iOS builds don't use the module yet and fall back to the mock engines.
+
+> Licence: the Kitten voice uses espeak-ng data, which is GPL-3.0. Builds that include it are for internal testing only until legal clears it.
+
 ---
 
 ## 4. Quick start: the build script
@@ -126,17 +140,17 @@ Run it from PowerShell in the project folder:
 
 | Goal | Command |
 |---|---|
-| Debug APK, phones + emulator | `.\scripts\build-android.ps1` |
-| Debug APK, **phones only** | `.\scripts\build-android.ps1 -PhoneOnly` |
-| Build and install on the USB phone | `.\scripts\build-android.ps1 -PhoneOnly -Install` |
-| After changing `app.json`, icons or native packages | `.\scripts\build-android.ps1 -PhoneOnly -Prebuild` |
-| Release APK (no dev server needed) | `.\scripts\build-android.ps1 -PhoneOnly -Release` |
+| Debug APK for real phones (the default) | `.\scripts\build-android.ps1` |
+| Build and install on the USB phone | `.\scripts\build-android.ps1 -Install` |
+| After changing `app.json`, icons or native packages | `.\scripts\build-android.ps1 -Prebuild` |
+| Release APK (no dev server needed) | `.\scripts\build-android.ps1 -Release` |
+| Also include the emulator (x86_64) | `.\scripts\build-android.ps1 -WithEmulator` |
 | Start from a clean slate | add `-Clean` |
 
 If PowerShell says *"running scripts is disabled on this system"*, run it this way for that one command (this doesn't change any system setting):
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .\scripts\build-android.ps1 -PhoneOnly
+powershell -ExecutionPolicy Bypass -File .\scripts\build-android.ps1
 ```
 
 Other options: `-Sdk <path>`, `-Jdk <path>`, `-CMakeVersion 4.1.2`.
@@ -194,11 +208,15 @@ Output: `android\app\build\outputs\apk\debug\app-debug.apk`
 | First build (everything compiled from scratch) | ~29 min | ~195 MB |
 | Later builds (only changed parts) | a few minutes | ~195 MB |
 
+These numbers include the emulator code. Since 20 Nov 2026 builds leave it out by default, so expect ~124 MB ([section 6](#6-android-build-for-real-phones-only-emulator-excluded)).
+
 It's large because a debug build carries unoptimised native code for three architectures (`arm64-v8a`, `armeabi-v7a`, `x86_64`). Release builds and Play Store downloads are much smaller.
 
 ---
 
 ## 6. Android build for real phones only (emulator excluded)
+
+**This is the project default since 20 Nov 2026:** every build skips the emulator. `app.json` lists only `arm64-v8a` and `armeabi-v7a`, and the script needs `-WithEmulator` to add `x86_64`.
 
 Real Android phones use ARM chips. The emulator on a PC uses `x86_64`. If you test only on real phones, leave out `x86_64`: the APK gets smaller and the C++ build takes about a third less time.
 
@@ -210,10 +228,10 @@ Real Android phones use ARM chips. The emulator on a PC uses `x86_64`. If you te
 
 ### 6.1 One build only (nothing saved)
 
-With the script:
+With the script (phone-only is the default):
 
 ```powershell
-.\scripts\build-android.ps1 -PhoneOnly
+.\scripts\build-android.ps1
 ```
 
 By hand, add the property to the Gradle command from 5.3:
@@ -225,9 +243,9 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-25"
 cd ..
 ```
 
-### 6.2 Make it the default (every build)
+### 6.2 How the default is set
 
-In `app.json`, remove `"x86_64"` from the `expo-build-properties` plugin:
+`app.json` → the `expo-build-properties` plugin lists only the two phone architectures:
 
 ```json
 ["expo-build-properties", {
@@ -240,11 +258,11 @@ In `app.json`, remove `"x86_64"` from the `expo-build-properties` plugin:
 
 Then regenerate the native project so it takes effect: `.\scripts\build-android.ps1 -Prebuild` (this writes `reactNativeArchitectures=arm64-v8a,armeabi-v7a` into `android\gradle.properties`).
 
-Put `x86_64` back when you want to use the emulator again.
+To use the emulator for one build, run `.\scripts\build-android.ps1 -WithEmulator`. To make it permanent again, add `"x86_64"` back to `buildArchs` and run with `-Prebuild`.
 
 ### 6.3 Results on this PC
 
-Tested on 20 Nov 2026 with `.\scripts\build-android.ps1 -PhoneOnly`:
+Tested on 20 Nov 2026 (phone-only build):
 
 | | All architectures | Phones only |
 |---|---|---|
@@ -264,7 +282,7 @@ Tested on 20 Nov 2026 with `.\scripts\build-android.ps1 -PhoneOnly`:
 adb install -r android\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-Or build and install in one step: `.\scripts\build-android.ps1 -PhoneOnly -Install`.
+Or build and install in one step: `.\scripts\build-android.ps1 -Install`.
 `-r` keeps the app's data when updating. If the install says the signatures don't match, uninstall first: `adb uninstall app.voxa`.
 
 You can also copy the APK to the phone (WhatsApp, Google Drive, a cable) and tap it. Android will ask you to allow installs from that app.
@@ -300,7 +318,7 @@ Then open Voxa on the phone. It finds `localhost:8081`. Re-run `adb reverse` aft
 A release APK has the JavaScript built in, so it runs without your PC. Use it to hand Voxa to testers.
 
 ```powershell
-.\scripts\build-android.ps1 -PhoneOnly -Release
+.\scripts\build-android.ps1 -Release
 ```
 
 Output: `android\app\build\outputs\apk\release\app-release.apk`
@@ -452,7 +470,7 @@ General reset, if a build fails strangely. This deletes only generated build out
 
 ```powershell
 Remove-Item -Recurse -Force android\build, android\app\build, android\app\.cxx -ErrorAction SilentlyContinue
-.\scripts\build-android.ps1 -PhoneOnly
+.\scripts\build-android.ps1
 ```
 
 ---

@@ -30,7 +30,9 @@ const VoicesContext = createContext<VoicesValue | null>(null);
 export function VoicesProvider({ children }: { children: ReactNode }) {
   const { voice: engine } = useEngines();
   const [voices, setVoices] = useState<Voice[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Loading until the current engine's voice list has arrived (the engine can switch at runtime).
+  const [loadedFor, setLoadedFor] = useState<unknown>(null);
+  const loading = loadedFor !== engine;
   const [defaultId, setDefault] = useState('lily');
   const [favourites, setFavourites] = useState<ReadonlySet<string>>(new Set(['lily']));
   const [downloads, setDownloads] = useState<Record<string, number>>({});
@@ -40,16 +42,25 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     setVoices(await engine.listVoices());
-    setLoading(false);
+    setLoadedFor(engine);
   }, [engine]);
 
   useEffect(() => {
     let live = true;
-    engine.listVoices().then((list) => {
-      if (!live) return;
-      setVoices(list);
-      setLoading(false);
-    });
+    engine
+      .listVoices()
+      .then((list) => {
+        if (!live) return;
+        setVoices(list);
+        // Each engine has its own voices; keep the default pointing at one that is installed.
+        setDefault((current) =>
+          list.some((v) => v.id === current && v.installed) ? current : (list.find((v) => v.installed)?.id ?? current),
+        );
+        setLoadedFor(engine);
+      })
+      .catch(() => {
+        if (live) setLoadedFor(engine);
+      });
     const downloadsAtMount = handles.current;
     const previewAtMount = preview;
     return () => {

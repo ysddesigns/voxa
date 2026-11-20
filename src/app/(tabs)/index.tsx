@@ -36,7 +36,8 @@ export default function Home() {
       right={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Settings"
+          accessibilityLabel="Settings and engine lab"
+          onPress={() => router.push('/engine-lab')}
           style={[styles.avatar, { backgroundColor: colors.chip }]}
         >
           <Icon name="person" color={colors.text} />

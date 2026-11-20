@@ -1,0 +1,118 @@
+<#
+.SYNOPSIS
+  Downloads the sherpa-onnx Android library and the on-device models used by
+  modules/voxa-engine, and copies only what the app needs into the module.
+  The files are large and are ignored by Git; run this after cloning.
+
+.EXAMPLE
+  .\scripts\fetch-engine.ps1          # download what is missing, then install
+  .\scripts\fetch-engine.ps1 -Force   # download everything again
+
+  Sources (all from https://github.com/k2-fsa/sherpa-onnx/releases):
+    sherpa-onnx-2.0.1.aar                                           Apache-2.0
+    sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2  Apache-2.0
+    kitten-nano-en-v0_8-int8.tar.bz2  Apache-2.0 model; includes espeak-ng data (GPL-3.0)
+    silero_vad_v5.onnx                                              MIT
+
+  LICENCE NOTE: espeak-ng (GPL-3.0) is used for Kitten phonemes. Builds made
+  with these files are for internal testing only until the espeak-ng legal
+  question in the PRD is answered.
+#>
+param(
+  [string]$SherpaVersion = '2.0.1',
+  [switch]$Force
+)
+
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$root = Split-Path -Parent $PSScriptRoot
+$cache = Join-Path $root '.engine-cache'
+$module = Join-Path $root 'modules\voxa-engine\android'
+$abis = @('arm64-v8a', 'armeabi-v7a')   # phones only, no x86/x86_64 emulator code
+$base = 'https://github.com/k2-fsa/sherpa-onnx/releases/download'
+
+$files = @(
+  @{ Key = 'aar';  Url = "$base/v$SherpaVersion/sherpa-onnx-$SherpaVersion.aar";                                      Name = "sherpa-onnx-$SherpaVersion.aar" },
+  @{ Key = 'asr';  Url = "$base/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2";          Name = 'sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2' },
+  @{ Key = 'tts';  Url = "$base/tts-models/kitten-nano-en-v0_8-int8.tar.bz2";                                         Name = 'kitten-nano-en-v0_8-int8.tar.bz2' },
+  @{ Key = 'vad';  Url = "$base/asr-models/silero_vad_v5.onnx";                                                       Name = 'silero_vad_v5.onnx' }
+)
+
+function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
+function Fresh($dir) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }; New-Item -ItemType Directory -Force $dir | Out-Null; $dir }
+
+# --- Download: each file into its own folder -----------------------------------------
+foreach ($f in $files) {
+  $dir = Join-Path $cache "downloads\$($f.Key)"
+  $out = Join-Path $dir $f.Name
+  if ((Test-Path $out) -and -not $Force) { Write-Host "have $($f.Name)"; continue }
+  Step "Downloading $($f.Name)"
+  Fresh $dir | Out-Null
+  & curl.exe -L --fail --retry 3 -o $out $f.Url
+  if ($LASTEXITCODE) { throw "Download failed: $($f.Url)" }
+  Write-Host ("  {0:N1} MB" -f ((Get-Item $out).Length / 1MB))
+}
+
+$tar = "$env:SystemRoot\System32\tar.exe"
+function Unpack($key, $name) {
+  $dst = Fresh (Join-Path $cache "extract\$key")
+  & $tar -xf (Join-Path $cache "downloads\$key\$name") -C $dst
+  if ($LASTEXITCODE) { throw "Could not unpack $name" }
+  $dst
+}
+
+# --- Library: Kotlin classes + native libraries for phone ABIs ---------------------------
+Step 'Installing the sherpa-onnx library'
+$aar = Unpack 'aar' "sherpa-onnx-$SherpaVersion.aar"
+$libs = Fresh (Join-Path $module 'libs')
+Copy-Item (Join-Path $aar 'classes.jar') (Join-Path $libs 'sherpa-onnx-classes.jar')
+foreach ($abi in $abis) {
+  $src = Join-Path $aar "jni\$abi"
+  if (-not (Test-Path $src)) { throw "The AAR has no $abi libraries" }
+  $dst = Fresh (Join-Path $module "src\main\jniLibs\$abi")
+  # The Kotlin API only loads the JNI library, which needs only onnxruntime.
+  Copy-Item "$src\libsherpa-onnx-jni.so", "$src\libonnxruntime.so" $dst
+  Get-ChildItem $dst | ForEach-Object { Write-Host ("  {0}/{1}  {2:N1} MB" -f $abi, $_.Name, ($_.Length / 1MB)) }
+}
+
+# --- Models --------------------------------------------------------------------------
+$assets = Join-Path $module 'src\main\assets\voxa-models'
+New-Item -ItemType Directory -Force $assets | Out-Null
+
+Step 'Installing the streaming speech model (int8 only)'
+$asr = Get-ChildItem (Unpack 'asr' $files[1].Name) -Directory | Select-Object -First 1
+$asrDst = Fresh (Join-Path $assets 'asr')
+function PickOnnx($dir, $part) {
+  $all = Get-ChildItem $dir.FullName -Filter "*$part*.onnx"
+  $int8 = $all | Where-Object Name -like '*int8*' | Select-Object -First 1
+  if ($int8) { $int8 } else { $all | Select-Object -First 1 }
+}
+foreach ($part in 'encoder', 'decoder', 'joiner') {
+  $file = PickOnnx $asr $part
+  if (-not $file) { throw "No $part model in $($asr.Name)" }
+  Copy-Item $file.FullName (Join-Path $asrDst "$part.onnx")
+}
+Copy-Item (Join-Path $asr.FullName 'tokens.txt') $asrDst
+$wav = Get-ChildItem (Join-Path $asr.FullName 'test_wavs') -Filter '*.wav' -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($wav) { Copy-Item $wav.FullName (Join-Path $asrDst 'benchmark.wav') }
+
+Step 'Installing the Kitten voice'
+$tts = Get-ChildItem (Unpack 'tts' $files[2].Name) -Directory | Select-Object -First 1
+$ttsDst = Fresh (Join-Path $assets 'tts')
+$model = Get-ChildItem $tts.FullName -Filter '*.onnx' | Select-Object -First 1
+Copy-Item $model.FullName (Join-Path $ttsDst 'model.onnx')
+Copy-Item (Join-Path $tts.FullName 'voices.bin') $ttsDst
+Copy-Item (Join-Path $tts.FullName 'tokens.txt') $ttsDst
+Copy-Item -Recurse (Join-Path $tts.FullName 'espeak-ng-data') $ttsDst
+# Kitten is English-only: keep the English dictionary, drop the other ~100 languages.
+Get-ChildItem (Join-Path $ttsDst 'espeak-ng-data') -Filter '*_dict' | Where-Object Name -ne 'en_dict' | Remove-Item
+
+Step 'Installing the voice activity detector'
+$vadDst = Fresh (Join-Path $assets 'vad')
+Copy-Item (Join-Path $cache "downloads\vad\silero_vad_v5.onnx") (Join-Path $vadDst 'silero_vad.onnx')
+
+Step 'Done'
+Get-ChildItem $assets -Directory | ForEach-Object {
+  $mb = (Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+  Write-Host ("  models/{0}  {1:N1} MB" -f $_.Name, $mb)
+}

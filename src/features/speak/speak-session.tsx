@@ -56,7 +56,7 @@ export function makeTitle(text: string): string {
 
 export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const { voice: engine } = useEngines();
-  const { defaultId } = useVoices();
+  const { defaultId, byId } = useVoices();
   const [text, setTextState] = useState('');
   const [voiceId, setVoiceIdState] = useState<string | null>(null);
   const [rate, setRate] = useState(1);
@@ -66,7 +66,8 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const words = useMemo(() => tokenize(text), [text]);
   const handle = useRef<SpeakHandle | null>(null);
   const generation = useRef(0);
-  const effectiveVoice = voiceId ?? defaultId;
+  // A picked voice may belong to the other engine (mock vs device); fall back to the default.
+  const effectiveVoice = voiceId && byId(voiceId)?.installed ? voiceId : defaultId;
 
   const halt = useCallback(() => {
     generation.current++;

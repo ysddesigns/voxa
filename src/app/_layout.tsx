@@ -25,6 +25,7 @@ function Root() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="editor" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="engine-lab" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen
           name="voice-picker"

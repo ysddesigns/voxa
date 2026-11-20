@@ -42,3 +42,11 @@ yarn-error.*
 
 # build checks
 dist-check/
+
+# on-device engine: downloaded by scripts/fetch-engine.ps1 (large, licence-gated)
+.engine-cache/
+modules/voxa-engine/android/libs/
+modules/voxa-engine/android/src/main/jniLibs/
+modules/voxa-engine/android/src/main/assets/voxa-models/
+modules/*/android/build/
+modules/*/android/.cxx/

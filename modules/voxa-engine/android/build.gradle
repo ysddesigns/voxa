@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.voxa'
+version = '0.1.0'
+
+android {
+  namespace "app.voxa.engine"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+// libs/, src/main/jniLibs/ and src/main/assets/voxa-models/ come from
+// scripts/fetch-engine.ps1 (sherpa-onnx 2.0.1, phone ABIs only).
+dependencies {
+  def classes = file('libs/sherpa-onnx-classes.jar')
+  if (!classes.exists()) {
+    throw new GradleException("modules/voxa-engine is missing sherpa-onnx. Run .\\scripts\\fetch-engine.ps1 first.")
+  }
+  implementation files(classes)
+}
