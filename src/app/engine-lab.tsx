@@ -52,19 +52,20 @@ function rows(r: BenchmarkResult): Row[] {
   const ms = (n: number) => `${Math.round(n)} ms`;
   return [
     { label: 'Phone', value: `${r.device} · Android ${r.android} · ${r.abi} · ${r.cores} cores` },
+    ...(r.ttsName ? [{ label: 'Voice', value: r.ttsName }] : []),
     { label: 'Voice load', value: `${ms(r.ttsLoadMs)}${r.ttsCold ? '' : ' (already loaded)'}` },
     { label: 'Voices in model', value: String(r.ttsVoices) },
     { label: 'First audio (short sentence)', value: ms(r.ttsFirstAudioMs), ok: r.ttsFirstAudioMs <= TARGETS.firstAudioMs },
     { label: 'Voice speed (RTF)', value: `${r.ttsRtf.toFixed(2)} · ${ms(r.ttsGenMs)} for ${r.ttsAudioSec.toFixed(1)} s`, ok: r.ttsRtf <= TARGETS.rtf },
-    ...(r.piperError
-      ? [{ label: 'Piper voice (compare)', value: r.piperError, ok: false }]
-      : r.piperRtf === undefined
+    ...(r.compareError
+      ? [{ label: `${r.compareName ?? 'Other voice'} (compare)`, value: r.compareError, ok: false }]
+      : r.compareRtf === undefined
         ? []
         : [
             {
-              label: 'Piper voice (compare)',
-              value: `RTF ${r.piperRtf.toFixed(2)} · first audio ${ms(r.piperFirstAudioMs ?? 0)} · load ${ms(r.piperLoadMs ?? 0)}`,
-              ok: r.piperRtf <= TARGETS.rtf,
+              label: `${r.compareName ?? 'Other voice'} (compare)`,
+              value: `RTF ${r.compareRtf.toFixed(2)} · first audio ${ms(r.compareFirstAudioMs ?? 0)} · load ${ms(r.compareLoadMs ?? 0)}`,
+              ok: r.compareRtf <= TARGETS.rtf,
             },
           ]),
     { label: 'Listen load', value: `${ms(r.asrLoadMs)}${r.asrCold ? '' : ' (already loaded)'}` },

@@ -71,7 +71,7 @@ private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
 
 /**
  * On-device speech for Voxa (engine spike, Android only).
- *  - speak: Kitten nano (sherpa-onnx OfflineTts), one sentence (or 20-word piece) at a time, played
+ *  - speak: Piper LJSpeech medium (sherpa-onnx OfflineTts, VITS), one sentence (or 20-word piece) at a time, played
  *    with AudioTrack. Text becomes voice tokens in KittenTokenizer: English words from the lexicon,
  *    other words from pronunciations the app passes in (Nigerian spelling rules). Word events are
  *    estimated from each piece's audio length, weighted by word length.
@@ -219,31 +219,44 @@ class VoxaEngineModule : Module() {
   private fun ensureTts(): OfflineTts = synchronized(lock) {
     tts?.let { return it }
     val t0 = SystemClock.elapsedRealtime()
-    val config = OfflineTtsConfig(
-      model = OfflineTtsModelConfig(
-        kitten = OfflineTtsKittenModelConfig(
-          model = "$MODELS/tts/model.onnx",
-          voices = "$MODELS/tts/voices.bin",
-          tokens = "$MODELS/tts/tokens.txt",
-          // No lexicon here: KittenTokenizer reads it and passes tokens (sherpa-onnx 2.x has no espeak-ng).
-        ),
-        numThreads = TTS_THREADS,
-        debug = false,
-        provider = "cpu",
-      ),
-      maxNumSentences = 1,
-    )
-    val created = OfflineTts(assetManager = context.assets, config = config)
+    // The speaking voice: Piper LJSpeech medium (VITS, public-domain recordings). Chosen over
+    // Kitten in Phase 0: first audio 0.55 s vs 1.48 s on a Redmi Note 13.
+    // No lexicon or espeak-ng here: KittenTokenizer reads the lexicon and passes tokens.
+    val created = OfflineTts(assetManager = context.assets, config = piperConfig("$MODELS/voice"))
     val assets = context.assets
     tokenizer = KittenTokenizer(
       assets.open("$MODELS/tts/lexicon.txt").bufferedReader(Charsets.UTF_8),
-      assets.open("$MODELS/tts/tokens.txt").bufferedReader(Charsets.UTF_8),
+      assets.open("$MODELS/voice/tokens.txt").bufferedReader(Charsets.UTF_8),
     )
     ttsLoadMs = SystemClock.elapsedRealtime() - t0
     Log.i(TAG, "voice loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz, ${tokenizer?.size} lexicon words")
     tts = created
     created
   }
+
+  private fun piperConfig(dir: String) = OfflineTtsConfig(
+    model = OfflineTtsModelConfig(
+      vits = OfflineTtsVitsModelConfig(model = "$dir/model.onnx", tokens = "$dir/tokens.txt"),
+      numThreads = TTS_THREADS,
+      debug = false,
+      provider = "cpu",
+    ),
+    maxNumSentences = 1,
+  )
+
+  private fun kittenConfig() = OfflineTtsConfig(
+    model = OfflineTtsModelConfig(
+      kitten = OfflineTtsKittenModelConfig(
+        model = "$MODELS/tts/model.onnx",
+        voices = "$MODELS/tts/voices.bin",
+        tokens = "$MODELS/tts/tokens.txt",
+      ),
+      numThreads = TTS_THREADS,
+      debug = false,
+      provider = "cpu",
+    ),
+    maxNumSentences = 1,
+  )
 
   private fun ensureAsr(): OnlineRecognizer = synchronized(lock) {
     recognizer?.let { return it }
@@ -678,6 +691,7 @@ class VoxaEngineModule : Module() {
     out["ttsMemMb"] = pssMb() - base
     out["ttsLoadMs"] = ttsLoadMs.toDouble()
     out["ttsVoices"] = t.numSpeakers()
+    out["ttsName"] = "Piper LJSpeech"
 
     var t0 = SystemClock.elapsedRealtime()
     synth(t, "Hello there.", 0, 1f) ?: throw IllegalStateException("The voice produced no audio")
@@ -692,37 +706,27 @@ class VoxaEngineModule : Module() {
     out["ttsAudioSec"] = audioSec
     out["ttsRtf"] = genMs / 1000.0 / audioSec
 
-    // Piper (VITS, Amy low, int8) for comparison. It is loaded only here and released at once,
+    // Kitten nano for comparison (the Phase 0 runner-up). Loaded only here and released at once,
     // so the peak memory below is for the models the app really uses.
-    if (assetExists("$MODELS/piper/model.onnx")) {
+    if (assetExists("$MODELS/tts/model.onnx")) {
+      out["compareName"] = "Kitten nano"
       t0 = SystemClock.elapsedRealtime()
-      val piper = OfflineTts(
-        assetManager = context.assets,
-        config = OfflineTtsConfig(
-          model = OfflineTtsModelConfig(
-            vits = OfflineTtsVitsModelConfig(model = "$MODELS/piper/model.onnx", tokens = "$MODELS/piper/tokens.txt"),
-            numThreads = 2,
-            debug = false,
-            provider = "cpu",
-          ),
-          maxNumSentences = 1,
-        ),
-      )
+      val other = OfflineTts(assetManager = context.assets, config = kittenConfig())
       try {
-        val ptk = tokenizer!!.withTokens(context.assets.open("$MODELS/piper/tokens.txt").bufferedReader(Charsets.UTF_8))
-        out["piperLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+        val otk = tokenizer!!.withTokens(context.assets.open("$MODELS/tts/tokens.txt").bufferedReader(Charsets.UTF_8))
+        out["compareLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
         t0 = SystemClock.elapsedRealtime()
-        synth(piper, "Hello there.", 0, 1f, tk = ptk) ?: throw IllegalStateException("Piper produced no audio")
-        out["piperFirstAudioMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+        synth(other, "Hello there.", 0, 1f, tk = otk) ?: throw IllegalStateException("Kitten produced no audio")
+        out["compareFirstAudioMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
         t0 = SystemClock.elapsedRealtime()
-        val pa = synth(piper, sample, 0, 1f, tk = ptk) ?: throw IllegalStateException("Piper produced no audio")
-        val pMs = SystemClock.elapsedRealtime() - t0
-        out["piperRtf"] = pMs / 1000.0 / (pa.samples.size.toDouble() / pa.sampleRate)
+        val oa = synth(other, sample, 0, 1f, tk = otk) ?: throw IllegalStateException("Kitten produced no audio")
+        val oMs = SystemClock.elapsedRealtime() - t0
+        out["compareRtf"] = oMs / 1000.0 / (oa.samples.size.toDouble() / oa.sampleRate)
       } catch (e: Throwable) {
-        Log.e(TAG, "Piper benchmark failed", e)
-        out["piperError"] = e.message ?: e.toString()
+        Log.e(TAG, "comparison voice failed", e)
+        out["compareError"] = e.message ?: e.toString()
       } finally {
-        piper.release()
+        other.release()
       }
     }
 

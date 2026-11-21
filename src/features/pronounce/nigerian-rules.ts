@@ -1,7 +1,7 @@
 /**
  * Spelling-to-sound rules for Yoruba, Igbo and Hausa words (names, places, everyday words).
  *
- * The Kitten voice only knows American English sounds, so every rule maps to a sound that
+ * The voice (Piper LJSpeech, like Kitten before it) only knows American English sounds, so every rule maps to a sound that
  * the English lexicon (lexicon-en-us.txt) already uses. That makes the output close, not
  * perfect: Yoruba and Igbo tones are not spoken (a high tone becomes the stressed syllable),
  * Hausa ɓ ɗ ƙ become b d k, and nasal vowels become vowel + n.

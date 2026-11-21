@@ -17,8 +17,8 @@
     sherpa-onnx-pyannote-segmentation-3-0.tar.bz2  (speaker turns)  MIT
     3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx (who speaks)  Apache-2.0
     0-four-speakers-zh.wav   test clip with four speakers, for the speaker-label benchmark
-    vits-piper-en_US-amy-low-int8.tar.bz2   Piper voice, benchmark only. Model MIT; the
-                                            Amy recordings' licence is unclear, do not ship it.
+    vits-piper-en_US-ljspeech-medium-int8.tar.bz2   the speaking voice (Piper). Trained from
+                                            scratch on LJ Speech, which is public domain.
     sherpa-onnx-online-punct-en-2024-08-06.tar.bz2   punctuation and capitals for transcripts
                                             (Edge-Punct-Casing; licence to be checked)
 
@@ -49,7 +49,7 @@ $files = @(
   # The release tag really is spelled "recongition".
   @{ Key = 'emb';  Url = "$base/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx";      Name = '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' },
   @{ Key = 'diarwav'; Url = "$base/speaker-segmentation-models/0-four-speakers-zh.wav";                               Name = '0-four-speakers-zh.wav' },
-  @{ Key = 'piper'; Url = "$base/tts-models/vits-piper-en_US-amy-low-int8.tar.bz2";                              Name = 'vits-piper-en_US-amy-low-int8.tar.bz2' },
+  @{ Key = 'voice'; Url = "$base/tts-models/vits-piper-en_US-ljspeech-medium-int8.tar.bz2";                      Name = 'vits-piper-en_US-ljspeech-medium-int8.tar.bz2' },
   @{ Key = 'punct'; Url = "$base/punctuation-models/sherpa-onnx-online-punct-en-2024-08-06.tar.bz2";                Name = 'sherpa-onnx-online-punct-en-2024-08-06.tar.bz2' }
 )
 
@@ -111,7 +111,7 @@ Copy-Item (Join-Path $asr.FullName 'tokens.txt') $asrDst
 $wav = Get-ChildItem (Join-Path $asr.FullName 'test_wavs') -Filter '*.wav' -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($wav) { Copy-Item $wav.FullName (Join-Path $asrDst 'benchmark.wav') }
 
-Step 'Installing the Kitten voice'
+Step 'Installing the Kitten voice (benchmark comparison) and the English lexicon'
 $tts = Get-ChildItem (Unpack 'tts' $files[2].Name) -Directory | Select-Object -First 1
 $ttsDst = Fresh (Join-Path $assets 'tts')
 $model = Get-ChildItem $tts.FullName -Filter '*.onnx' | Select-Object -First 1
@@ -133,12 +133,15 @@ Copy-Item $segModel.FullName (Join-Path $diarDst 'segmentation.onnx')
 Copy-Item (Join-Path $cache 'downloads\emb\3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx') (Join-Path $diarDst 'embedding.onnx')
 Copy-Item (Join-Path $cache 'downloads\diarwav\0-four-speakers-zh.wav') (Join-Path $diarDst 'benchmark.wav')
 
-Step 'Installing the Piper voice (benchmark only, no espeak-ng-data)'
-$piper = Get-ChildItem (Unpack 'piper' 'vits-piper-en_US-amy-low-int8.tar.bz2') -Directory | Select-Object -First 1
-$piperDst = Fresh (Join-Path $assets 'piper')
-$piperModel = Get-ChildItem $piper.FullName -Filter '*.onnx' | Select-Object -First 1
-Copy-Item $piperModel.FullName (Join-Path $piperDst 'model.onnx')
-Copy-Item (Join-Path $piper.FullName 'tokens.txt') $piperDst
+Step 'Installing the speaking voice: Piper LJSpeech medium (no espeak-ng-data)'
+$voice = Get-ChildItem (Unpack 'voice' 'vits-piper-en_US-ljspeech-medium-int8.tar.bz2') -Directory | Select-Object -First 1
+$voiceDst = Fresh (Join-Path $assets 'voice')
+$voiceModel = Get-ChildItem $voice.FullName -Filter '*.onnx' | Select-Object -First 1
+Copy-Item $voiceModel.FullName (Join-Path $voiceDst 'model.onnx')
+Copy-Item (Join-Path $voice.FullName 'tokens.txt') $voiceDst
+# Amy (unclear licence) was only for the Phase 0 comparison; make sure it is not shipped.
+$oldPiper = Join-Path $assets 'piper'
+if (Test-Path $oldPiper) { Remove-Item -Recurse -Force $oldPiper }
 
 Step 'Installing the punctuation model (int8 only)'
 $punct = Get-ChildItem (Unpack 'punct' 'sherpa-onnx-online-punct-en-2024-08-06.tar.bz2') -Directory | Select-Object -First 1

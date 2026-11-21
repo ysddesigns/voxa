@@ -5,10 +5,12 @@ import type { Engines, ListenEvent, ListenSession, SpeakEvent, SpeakHandle, Tran
 
 /**
  * On-device engines backed by modules/voxa-engine (sherpa-onnx). Android only for now:
- * voice = Kitten nano, speech = streaming Zipformer 20M. Scan and summary still use the mocks.
+ * voice = Piper LJSpeech medium (chosen in Phase 0), speech = streaming Zipformer 20M. Scan and summary still use the mocks.
  */
 
-const VOICE_PREFIX = 'kitten-';
+const VOICE_PREFIX = 'device-';
+/** Ids saved by builds that used the Kitten voice still map to speaker 0. */
+const OLD_PREFIX = 'kitten-';
 
 /**
  * The Zipformer model writes in capitals ("HELLO THERE"); make it read like a sentence.
@@ -20,19 +22,21 @@ export function tidyTranscript(text: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-export function kittenVoices(count: number): Voice[] {
+/** The voices built into the app: one per speaker in the on-device model. */
+export function deviceVoices(count: number): Voice[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `${VOICE_PREFIX}${i}`,
-    name: `Kitten ${i + 1}`,
+    name: count === 1 ? 'Standard' : `Standard ${i + 1}`,
     tags: ['Built-in', 'English US'],
-    sizeMB: 25,
+    sizeMB: 19,
     variant: 'lite' as const,
     installed: true,
   }));
 }
 
 export function speakerId(voiceId: string): number {
-  const n = Number(voiceId.startsWith(VOICE_PREFIX) ? voiceId.slice(VOICE_PREFIX.length) : NaN);
+  const prefix = [VOICE_PREFIX, OLD_PREFIX].find((p) => voiceId.startsWith(p));
+  const n = Number(prefix ? voiceId.slice(prefix.length) : NaN);
   return Number.isInteger(n) && n >= 0 ? n : 0;
 }
 
@@ -54,12 +58,12 @@ export function getNativeEngines(): Engines | null {
     voice: {
       async listVoices() {
         const { numSpeakers } = await native.loadVoice();
-        return kittenVoices(numSpeakers);
+        return deviceVoices(numSpeakers);
       },
 
       downloadVoice(id) {
-        // Kitten voices ship inside the app; real voice packs come with the download service.
-        const done = id.startsWith(VOICE_PREFIX) ? Promise.resolve() : Promise.reject(new Error('Voice packs are not available yet'));
+        // Built-in voices ship inside the app; real voice packs come with the download service.
+        const done = id.startsWith(VOICE_PREFIX) || id.startsWith(OLD_PREFIX) ? Promise.resolve() : Promise.reject(new Error('Voice packs are not available yet'));
         return { cancel() {}, done };
       },
 

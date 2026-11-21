@@ -45,11 +45,13 @@ export type BenchmarkResult = {
   asrMemMb?: number;
   diarMemMb?: number;
   ttsThreads?: number;
-  /** Piper (Amy low, int8) for comparison with Kitten; benchmark only. */
-  piperLoadMs?: number;
-  piperFirstAudioMs?: number;
-  piperRtf?: number;
-  piperError?: string;
+  /** The speaking voice's name, and the runner-up voice measured for comparison (Kitten nano). */
+  ttsName?: string;
+  compareName?: string;
+  compareLoadMs?: number;
+  compareFirstAudioMs?: number;
+  compareRtf?: number;
+  compareError?: string;
   /** Speaker labels on a four-speaker clip, and memory with every model loaded. */
   diarLoadMs?: number;
   diarAudioSec?: number;
