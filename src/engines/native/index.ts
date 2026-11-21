@@ -70,6 +70,8 @@ export function getNativeEngines(): Engines | null {
   if (!native) return (cached = null);
 
   const mock = createMockEngines();
+  // Builds from before voice packs (no installPack) take speak/loadVoice without the voice argument.
+  const packsBuild = !!native.installPack;
   const speakers = new Map<number, (e: NativeSpeakEvent) => void>();
   native.addListener('onSpeak', (e) => speakers.get(e.id)?.(e));
   let nextId = 1;
@@ -79,7 +81,7 @@ export function getNativeEngines(): Engines | null {
     voice: {
       async listVoices() {
         // Warm up the built-in voice in the background (a few seconds); the list does not wait.
-        native.loadVoice('').catch(() => {});
+        (packsBuild ? native.loadVoice('') : (native.loadVoice as unknown as () => Promise<unknown>)()).catch(() => {});
         const installed = packService?.installed() ?? new Set<string>();
         const downloadable = packService ? catalogueVoices() : [];
         return [...deviceVoices(1), ...downloadable.map((p) => packVoice(p, installed.has(p.id)))];
@@ -131,7 +133,9 @@ export function getNativeEngines(): Engines | null {
         });
         // Yoruba, Igbo and Hausa words get pronunciations from the spelling rules.
         const { overrides, fallbacks } = pronunciationHints(text);
-        native.speak(id, text, speakerId(options.voiceId), options.rate ?? 1, overrides, fallbacks, packIdOf(options.voiceId));
+        const rate = options.rate ?? 1;
+        if (packsBuild) native.speak(id, text, speakerId(options.voiceId), rate, overrides, fallbacks, packIdOf(options.voiceId));
+        else (native.speak as unknown as (...a: unknown[]) => void)(id, text, speakerId(options.voiceId), rate, overrides, fallbacks);
         return {
           stop() {
             if (finished) return;
