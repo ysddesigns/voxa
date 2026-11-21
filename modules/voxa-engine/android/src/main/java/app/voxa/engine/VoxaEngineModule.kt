@@ -14,6 +14,8 @@ import android.os.Debug
 import android.os.SystemClock
 import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
+import com.k2fsa.sherpa.onnx.GeneratedAudio
+import com.k2fsa.sherpa.onnx.GenerationConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
@@ -38,13 +40,17 @@ import kotlin.math.sqrt
 private const val TAG = "VoxaEngine"
 private const val MODELS = "voxa-models"
 private const val ASR_RATE = 16000
+/** Longer sentences are spoken in pieces, like sherpa-onnx's max_words_in_sentence. */
+private const val MAX_WORDS = 20
 private val WORD = Regex("\\S+")
 private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
 
 /**
  * On-device speech for Voxa (engine spike, Android only).
- *  - speak: Kitten nano (sherpa-onnx OfflineTts), one sentence at a time, played with AudioTrack.
- *    Word events are estimated from each sentence's audio length, weighted by word length.
+ *  - speak: Kitten nano (sherpa-onnx OfflineTts), one sentence (or 20-word piece) at a time, played
+ *    with AudioTrack. Text becomes voice tokens in KittenTokenizer: English words from the lexicon,
+ *    other words from pronunciations the app passes in (Nigerian spelling rules). Word events are
+ *    estimated from each piece's audio length, weighted by word length.
  *  - listen: streaming Zipformer 20M (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input.
  *  - benchmark: load time, real-time factor, first-audio latency and memory.
  */
@@ -54,6 +60,7 @@ class VoxaEngineModule : Module() {
 
   private val lock = Any()
   private var tts: OfflineTts? = null
+  private var tokenizer: KittenTokenizer? = null
   private var ttsLoadMs = 0L
   private var recognizer: OnlineRecognizer? = null
   private var asrLoadMs = 0L
@@ -85,9 +92,10 @@ class VoxaEngineModule : Module() {
     }
 
     // Starts speaking and returns at once; progress arrives as onSpeak events with this id.
-    Function("speak") { id: Int, text: String, sid: Int, speed: Double ->
+    // overrides win over the English lexicon; fallbacks are used only for words it lacks.
+    Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String> ->
       val gen = speakGen.incrementAndGet()
-      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat()) }
+      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks) }
       Unit
     }
 
@@ -155,8 +163,7 @@ class VoxaEngineModule : Module() {
           model = "$MODELS/tts/model.onnx",
           voices = "$MODELS/tts/voices.bin",
           tokens = "$MODELS/tts/tokens.txt",
-          // sherpa-onnx 2.x has no espeak-ng: words are looked up in this lexicon.
-          lexicon = "$MODELS/tts/lexicon.txt",
+          // No lexicon here: KittenTokenizer reads it and passes tokens (sherpa-onnx 2.x has no espeak-ng).
         ),
         numThreads = 2,
         debug = false,
@@ -165,8 +172,13 @@ class VoxaEngineModule : Module() {
       maxNumSentences = 1,
     )
     val created = OfflineTts(assetManager = context.assets, config = config)
+    val assets = context.assets
+    tokenizer = KittenTokenizer(
+      assets.open("$MODELS/tts/lexicon.txt").bufferedReader(Charsets.UTF_8),
+      assets.open("$MODELS/tts/tokens.txt").bufferedReader(Charsets.UTF_8),
+    )
     ttsLoadMs = SystemClock.elapsedRealtime() - t0
-    Log.i(TAG, "voice loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz")
+    Log.i(TAG, "voice loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz, ${tokenizer?.size} lexicon words")
     tts = created
     created
   }
@@ -196,7 +208,7 @@ class VoxaEngineModule : Module() {
   }
 
   private fun releaseModels() = synchronized(lock) {
-    tts?.release(); tts = null
+    tts?.release(); tts = null; tokenizer = null
     recognizer?.release(); recognizer = null
   }
 
@@ -206,13 +218,48 @@ class VoxaEngineModule : Module() {
     sendEvent("onSpeak", mapOf("id" to id, "type" to type) + extra)
   }
 
-  private fun splitSentences(text: String): List<Sentence> =
-    SENTENCE.findAll(text)
-      .filter { it.value.isNotBlank() }
-      .map { Sentence(it.range.first, it.range.last + 1, it.value.trim()) }
-      .toList()
+  /** Sentences, with long ones cut into pieces of at most MAX_WORDS words (at a comma when there is one). */
+  private fun splitSentences(text: String): List<Sentence> {
+    val out = ArrayList<Sentence>()
+    for (m in SENTENCE.findAll(text)) {
+      if (m.value.isBlank()) continue
+      val words = WORD.findAll(m.value).toList()
+      var first = 0
+      while (first < words.size) {
+        var last = minOf(first + MAX_WORDS, words.size) - 1
+        if (last < words.size - 1) {
+          val comma = (last downTo first + MAX_WORDS / 2).firstOrNull { words[it].value.endsWith(',') }
+          if (comma != null) last = comma
+        }
+        val start = m.range.first + words[first].range.first
+        val end = m.range.first + words[last].range.last + 1
+        out.add(Sentence(start, end, text.substring(start, end)))
+        first = last + 1
+      }
+    }
+    return out
+  }
 
-  private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float) {
+  /** Speaks one piece of text through the tokenizer. Returns null when no word could be pronounced. */
+  private fun synth(
+    engine: OfflineTts,
+    text: String,
+    sid: Int,
+    speed: Float,
+    overrides: Map<String, String> = emptyMap(),
+    fallbacks: Map<String, String> = emptyMap(),
+    skipped: MutableCollection<String>? = null,
+  ): GeneratedAudio? {
+    val tk = tokenizer ?: throw IllegalStateException("The voice is not loaded")
+    val tokens = tk.tokenize(text, overrides, fallbacks, skipped)
+    // Only spaces and punctuation means nothing to say.
+    if (tokens.none { t -> t.any { it.isLetter() } }) return null
+    val cfg = GenerationConfig(sid = sid, speed = speed, tokens = arrayOf(tokens.toTypedArray()))
+    val audio = engine.generateWithConfig(text, cfg)
+    return if (audio.samples.isEmpty()) null else audio
+  }
+
+  private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float, overrides: Map<String, String>, fallbacks: Map<String, String>) {
     fun live() = speakGen.get() == gen
     try {
       val engine = ensureTts()
@@ -247,15 +294,21 @@ class VoxaEngineModule : Module() {
       val player = thread(name = "voxa-tts-play") { play(id, gen, track, queue, words, rate) }
       val t0 = SystemClock.elapsedRealtime()
       var first = true
+      val skipped = LinkedHashSet<String>()
       for (s in sentences) {
         if (!live()) break
-        val audio = engine.generate(s.text, sid, speed)
+        val audio = synth(engine, s.text, sid, speed, overrides, fallbacks, skipped)
         if (first) {
           first = false
           emitSpeak(id, "metrics", mapOf("firstAudioMs" to (SystemClock.elapsedRealtime() - t0).toDouble()))
         }
-        val chunk = Chunk(s.start, s.end, audio.samples)
+        // A piece with no speakable words still goes to the player so its words are passed over.
+        val chunk = Chunk(s.start, s.end, audio?.samples ?: FloatArray(0))
         while (live() && !queue.offer(chunk, 50, TimeUnit.MILLISECONDS)) { /* wait for the player */ }
+      }
+      if (skipped.isNotEmpty()) {
+        Log.i(TAG, "words not spoken: $skipped")
+        emitSpeak(id, "skipped", mapOf("words" to skipped.toList()))
       }
       while (live() && !queue.offer(endOfSpeech, 50, TimeUnit.MILLISECONDS)) { /* wait */ }
       player.join()
@@ -408,12 +461,12 @@ class VoxaEngineModule : Module() {
     out["ttsVoices"] = t.numSpeakers()
 
     var t0 = SystemClock.elapsedRealtime()
-    t.generate("Hello there.", 0, 1f)
+    synth(t, "Hello there.", 0, 1f) ?: throw IllegalStateException("The voice produced no audio")
     out["ttsFirstAudioMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
 
     val sample = "Voxa reads your words out loud, right on this phone, with no internet connection at all."
     t0 = SystemClock.elapsedRealtime()
-    val audio = t.generate(sample, 0, 1f)
+    val audio = synth(t, sample, 0, 1f) ?: throw IllegalStateException("The voice produced no audio")
     val genMs = SystemClock.elapsedRealtime() - t0
     val audioSec = audio.samples.size.toDouble() / audio.sampleRate
     out["ttsGenMs"] = genMs.toDouble()

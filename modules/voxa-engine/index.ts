@@ -5,6 +5,8 @@ export type NativeSpeakEvent =
   | { id: number; type: 'start' | 'end' }
   | { id: number; type: 'word'; index: number; charStart: number; charEnd: number }
   | { id: number; type: 'metrics'; firstAudioMs: number }
+  /** Words the voice could not pronounce (not in the lexicon, no rule matched). */
+  | { id: number; type: 'skipped'; words: string[] }
   | { id: number; type: 'error'; message: string };
 
 export type NativeListenEvent =
@@ -35,7 +37,8 @@ export type BenchmarkResult = {
 
 type VoxaEngineNative = {
   loadVoice(): Promise<{ sampleRate: number; numSpeakers: number; loadMs: number }>;
-  speak(id: number, text: string, sid: number, speed: number): void;
+  /** overrides win over the English lexicon; fallbacks fill words it lacks. Values are space-separated phones. */
+  speak(id: number, text: string, sid: number, speed: number, overrides: Record<string, string>, fallbacks: Record<string, string>): void;
   stopSpeaking(): void;
   requestMicPermission(): Promise<{ granted: boolean; status: string; canAskAgain?: boolean }>;
   startListening(): Promise<{ loadMs: number }>;

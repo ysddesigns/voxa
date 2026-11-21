@@ -1,4 +1,5 @@
 import { VoxaEngine, type NativeListenEvent, type NativeSpeakEvent } from '../../../modules/voxa-engine';
+import { pronunciationHints } from '@/features/pronounce/hints';
 import { createMockEngines } from '../mock';
 import type { Engines, ListenEvent, ListenSession, SpeakEvent, SpeakHandle, TranscriptSegment, Voice } from '../types';
 
@@ -86,9 +87,14 @@ export function getNativeEngines(): Engines | null {
               onEvent?.({ type: 'error', message: e.message });
               finish();
               break;
+            case 'skipped':
+              if (__DEV__) console.info('Voxa voice skipped words it cannot pronounce:', e.words.join(', '));
+              break;
           }
         });
-        native.speak(id, text, speakerId(options.voiceId), options.rate ?? 1);
+        // Yoruba, Igbo and Hausa words get pronunciations from the spelling rules.
+        const { overrides, fallbacks } = pronunciationHints(text);
+        native.speak(id, text, speakerId(options.voiceId), options.rate ?? 1, overrides, fallbacks);
         return {
           stop() {
             if (finished) return;
