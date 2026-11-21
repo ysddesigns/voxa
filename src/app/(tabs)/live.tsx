@@ -1,9 +1,244 @@
-import { Placeholder, Screen } from '@/components/screen';
+import { useEffect, useRef, useState } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon, type IconName } from '@/components/icons';
+import { Screen } from '@/components/screen';
+import { useTheme } from '@/design/theme';
+import { minTouch, radius } from '@/design/tokens';
+import { type } from '@/design/type';
+import { useListen } from '@/features/listen/listen-session';
+import { formatClock } from '@/features/listen/format';
+import type { TranscriptSegment } from '@/engines/types';
+import type { Mark } from '@/storage/sessions';
 
+/** Live captions (PRD LS-1..LS-6): words as they are heard, marks, pause, saved as it goes. */
 export default function LiveScreen() {
+  const l = useListen();
+  const active = l.status !== 'idle';
+  return active ? <Listening /> : <Ready />;
+}
+
+function Ready() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const l = useListen();
   return (
-    <Screen title="Live">
-      <Placeholder text="Live transcription is built in Phase 1 (weeks 9–12): live words, speaker labels and marks. The mock speech engine already streams a sample meeting." />
+    <Screen title="Live" overline="Listen">
+      {l.recovered.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            const id = l.recovered[0].id;
+            l.dismissRecovered();
+            router.push({ pathname: '/session/[id]', params: { id } });
+          }}
+          style={[styles.banner, { backgroundColor: colors.warning }]}
+        >
+          <Text style={[type.bodyStrong, { color: colors.accentText }]}>
+            {l.recovered.length === 1 ? 'A meeting was interrupted' : `${l.recovered.length} meetings were interrupted`}
+          </Text>
+          <Text style={[type.caption, { color: colors.text }]}>
+            Voxa closed while listening. Everything heard up to then was saved. Tap to open it.
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <View style={[styles.hero, { backgroundColor: colors.card }]}>
+        <Text style={[type.title, { color: colors.text }]}>Live captions</Text>
+        <Text style={[type.body, { color: colors.textSecondary }]}>
+          Voxa writes down what it hears, on this phone, with no internet. It keeps listening with the screen off. Everything is saved as it goes.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Start listening"
+          onPress={() => {
+            l.clearError();
+            void l.start();
+          }}
+          style={({ pressed }) => [styles.start, { backgroundColor: pressed ? colors.accentText : colors.accent }]}
+        >
+          <Icon name="mic" color={colors.onAccent} />
+          <Text style={[type.bodyStrong, { color: colors.onAccent }]}>Start listening</Text>
+        </Pressable>
+      </View>
+
+      {l.error ? <Text style={[type.callout, { color: colors.accentText }]}>{l.error}</Text> : null}
+
+      <View style={[styles.tips, { backgroundColor: colors.card }]}>
+        <Tip icon="flag" text="Tap Mark at an important moment to find it later." />
+        <Tip icon="person" text="Speakers are labelled after the meeting ends." />
+        <Tip icon="lock" text="Audio never leaves the phone and is deleted once speakers are labelled." />
+      </View>
     </Screen>
   );
 }
+
+function Tip({ icon, text }: { icon: IconName; text: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.tip}>
+      <Icon name={icon} size={18} color={colors.accentText} />
+      <Text style={[type.callout, { color: colors.textSecondary, flex: 1 }]}>{text}</Text>
+    </View>
+  );
+}
+
+type Row = { kind: 'seg'; seg: TranscriptSegment } | { kind: 'mark'; mark: Mark; n: number } | { kind: 'partial'; text: string };
+
+function rows(segments: TranscriptSegment[], marks: Mark[], partial: string): Row[] {
+  const out: Row[] = [];
+  let m = 0;
+  for (const seg of segments) {
+    while (m < marks.length && marks[m].atMs <= seg.startMs) out.push({ kind: 'mark', mark: marks[m], n: ++m });
+    out.push({ kind: 'seg', seg });
+  }
+  while (m < marks.length) out.push({ kind: 'mark', mark: marks[m], n: ++m });
+  if (partial) out.push({ kind: 'partial', text: partial });
+  return out;
+}
+
+function Listening() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const l = useListen();
+  const list = useRef<FlatList<Row>>(null);
+  const [, tick] = useState(0);
+  const [follow, setFollow] = useState(true);
+
+  // The clock reads the engine's listened time twice a second.
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, []);
+
+  const data = rows(l.segments, l.marks, l.partial);
+  const paused = l.status === 'paused';
+  const busy = l.status === 'starting' || l.status === 'stopping';
+
+  const stop = async () => {
+    const id = await l.stop();
+    if (id) router.push({ pathname: '/session/[id]', params: { id } });
+  };
+
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top + 12 }]}>
+      <View style={styles.head}>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.overline, { color: paused ? colors.textTertiary : colors.accentText }]}>
+            {l.status === 'starting' ? 'Starting…' : l.status === 'stopping' ? 'Saving…' : paused ? 'Paused' : 'Listening'}
+          </Text>
+          <Text style={[type.title, { color: colors.text }]} accessibilityRole="header" numberOfLines={1}>
+            {l.title}
+          </Text>
+        </View>
+        <Text
+          style={[type.heading, { color: colors.text, fontVariant: ['tabular-nums'] }]}
+          accessibilityLabel={`Listened for ${formatClock(l.elapsedMs())}`}
+        >
+          {formatClock(l.elapsedMs())}
+        </Text>
+      </View>
+
+      <Level level={paused ? 0 : l.level} />
+
+      <FlatList
+        ref={list}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 10 }}
+        data={data}
+        keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}
+        onContentSizeChange={() => follow && list.current?.scrollToEnd({ animated: true })}
+        onScrollBeginDrag={() => setFollow(false)}
+        onMomentumScrollEnd={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          setFollow(contentOffset.y + layoutMeasurement.height >= contentSize.height - 40);
+        }}
+        ListEmptyComponent={
+          <Text style={[type.body, { color: colors.textTertiary }]}>
+            {busy ? 'Getting the microphone ready…' : paused ? 'Paused. Nothing is being heard.' : 'Listening… words appear here as people speak.'}
+          </Text>
+        }
+        renderItem={({ item }) => {
+          if (item.kind === 'mark') {
+            return (
+              <View style={[styles.mark, { backgroundColor: colors.warning }]}>
+                <Icon name="flag" size={14} color={colors.accentText} />
+                <Text style={[type.caption, { color: colors.accentText }]}>
+                  Mark {item.n} · {formatClock(item.mark.atMs)}
+                </Text>
+              </View>
+            );
+          }
+          if (item.kind === 'partial') {
+            return <Text style={[type.body, { color: colors.textTertiary }]}>{item.text}</Text>;
+          }
+          return <Text style={[type.body, { color: colors.text }]}>{item.seg.text}</Text>;
+        }}
+      />
+
+      {l.error ? <Text style={[type.caption, { color: colors.accentText, paddingHorizontal: 20 }]}>{l.error}</Text> : null}
+
+      <View style={[styles.controls, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : insets.bottom + 96 }]}>
+        <Control icon="flag" label="Mark" disabled={busy} onPress={() => l.mark()} />
+        <Control
+          icon={paused ? 'play' : 'pause'}
+          label={paused ? 'Resume' : 'Pause'}
+          disabled={busy}
+          onPress={() => void (paused ? l.resume() : l.pause())}
+        />
+        <Control icon="stop" label="Stop" primary disabled={busy} onPress={() => void stop()} />
+      </View>
+    </View>
+  );
+}
+
+function Level({ level }: { level: number }) {
+  const { colors } = useTheme();
+  // rms of speech is roughly 0.01-0.3: show it on a log scale so quiet rooms still move.
+  const v = level <= 0 ? 0 : Math.max(0, Math.min(1, (Math.log10(level) + 2.5) / 2));
+  const bars = 24;
+  return (
+    <View style={styles.level} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {Array.from({ length: bars }, (_, i) => {
+        const shape = 0.35 + 0.65 * Math.sin(((i + 0.5) / bars) * Math.PI);
+        return <View key={i} style={{ flex: 1, height: 4 + 28 * v * shape, borderRadius: 2, backgroundColor: v > 0 ? colors.accent : colors.waveUnplayed }} />;
+      })}
+    </View>
+  );
+}
+
+function Control({ icon, label, onPress, primary, disabled }: { icon: IconName; label: string; onPress: () => void; primary?: boolean; disabled?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.control,
+        { backgroundColor: primary ? colors.accent : pressed ? colors.chipPressed : colors.card, opacity: disabled ? 0.5 : 1 },
+      ]}
+    >
+      <Icon name={icon} size={22} color={primary ? colors.onAccent : colors.text} />
+      <Text style={[type.callout, { color: primary ? colors.onAccent : colors.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  head: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 20 },
+  banner: { borderRadius: radius.card, padding: 16, gap: 4 },
+  hero: { borderRadius: radius.hero, padding: 22, gap: 14 },
+  start: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: minTouch + 8, borderRadius: radius.pill },
+  tips: { borderRadius: radius.card, padding: 16, gap: 12 },
+  tip: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  level: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 36, paddingHorizontal: 20, marginTop: 12 },
+  mark: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderRadius: radius.chip, paddingHorizontal: 10, paddingVertical: 4 },
+  controls: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 10 },
+  control: { flex: 1, minHeight: minTouch + 16, borderRadius: radius.tile, alignItems: 'center', justifyContent: 'center', gap: 4 },
+});

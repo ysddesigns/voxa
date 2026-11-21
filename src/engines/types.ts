@@ -65,14 +65,29 @@ export type ListenEvent =
   | { type: 'error'; message: string };
 
 export interface ListenSession {
-  pause(): void;
-  resume(): void;
+  /** Stops the microphone; listened time stops counting until resume. */
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  /** Listened time so far (pauses left out): the clock segments and marks use. */
+  elapsedMs(): number;
   mark(label?: string): { atMs: number };
   stop(): Promise<TranscriptSegment[]>;
 }
 
+export type ListenOptions = {
+  /**
+   * Keep the audio here (relative to the app's documents folder) for speaker labels after the
+   * meeting. Ignored by engines that cannot label speakers.
+   */
+  audioPath?: string;
+};
+
+export type SpeakerTurn = { startMs: number; endMs: number; speaker: number };
+
 export interface SpeechEngine {
-  start(onEvent: (e: ListenEvent) => void): Promise<ListenSession>;
+  start(onEvent: (e: ListenEvent) => void, options?: ListenOptions): Promise<ListenSession>;
+  /** Present when this engine can find who spoke when in a recording made with audioPath. */
+  labelSpeakers?(audioPath: string, onProgress?: (fraction: number) => void): { cancel(): void; done: Promise<SpeakerTurn[]> };
 }
 
 export type ScanLine = { text: string; confidence: number; unsureWords: string[] };

@@ -38,11 +38,13 @@ import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
 import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
+import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor
 import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
 import com.k2fsa.sherpa.onnx.WaveReader
-import expo.modules.interfaces.permissions.Permissions
+import expo.modules.interfaces.permissions.PermissionsResponseListener
+import expo.modules.interfaces.permissions.PermissionsStatus
 import org.json.JSONObject
 import java.io.File
 import expo.modules.kotlin.Promise
@@ -64,6 +66,8 @@ private const val MAX_WORDS = 20
 /** The voice is the slowest model; give it up to 4 cores (2 made Kitten slower than real time on a Redmi Note 13). */
 private val TTS_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 private const val LONG_TEST_FILE = "long-test.jsonl"
+/** Clustering threshold for meetings: 0.5 found 7 speakers in a 4-speaker clip, so start higher. Tune on real meetings. */
+private const val LABEL_THRESHOLD = 0.6f
 /** Silero VAD reads 16 kHz audio in windows of 512 samples (32 ms). */
 private const val VAD_WINDOW = 512
 private val WORD = Regex("\\S+")
@@ -108,6 +112,10 @@ class VoxaEngineModule : Module() {
   /** Pack id → cancel requested, for installs in progress. */
   private val packCancels = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
   private var listenThread: Thread? = null
+  /** Audio heard by the last listening run, so the app can line up runs split by pauses. */
+  @Volatile private var lastHeardMs = 0L
+  @Volatile private var labelling = false
+  @Volatile private var labelCancel = false
 
   private class Sentence(val start: Int, val end: Int, val text: String)
   private class Chunk(val start: Int, val end: Int, val samples: FloatArray)
@@ -115,7 +123,7 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest", "onPack")
+    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel")
 
     // Warms up a voice ("" = built-in, else a pack id). Does not replace a voice already loaded,
     // so opening the Voices screen never interrupts speech in another voice.
@@ -145,28 +153,92 @@ class VoxaEngineModule : Module() {
       Unit
     }
 
+    // Asks for notifications too (Android 13+), so the "Voxa is listening" notice can show.
+    // Only the microphone decides the result: listening works without the notice.
     AsyncFunction("requestMicPermission") { promise: Promise ->
-      Permissions.askForPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.RECORD_AUDIO)
+      val perms = appContext.permissions
+      if (perms == null) {
+        promise.reject("E_PERMISSIONS", "Permissions are not available", null)
+        return@AsyncFunction
+      }
+      val wanted = if (Build.VERSION.SDK_INT >= 33) {
+        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+      } else {
+        arrayOf(Manifest.permission.RECORD_AUDIO)
+      }
+      perms.askForPermissions(PermissionsResponseListener { result ->
+        val mic = result[Manifest.permission.RECORD_AUDIO]
+        promise.resolve(
+          mapOf(
+            "granted" to (mic?.status == PermissionsStatus.GRANTED),
+            "status" to (mic?.status?.status ?: "undetermined"),
+            "canAskAgain" to (mic?.canAskAgain ?: true),
+          ),
+        )
+      }, *wanted)
     }
 
-    AsyncFunction("startListening") { promise: Promise ->
+    // audioPath: "" for none, or a path inside the app's files folder where the audio is appended
+    // as 16-bit mono PCM (used for speaker labels after the meeting).
+    AsyncFunction("startListening") { audioPath: String, promise: Promise ->
+      val audio = if (audioPath.isEmpty()) null else appFile(audioPath)
       if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
         promise.reject("E_MIC_PERMISSION", "Microphone permission is not granted", null)
+      } else if (audioPath.isNotEmpty() && audio == null) {
+        promise.reject("E_PATH", "Bad audio path", null)
       } else if (listening) {
         promise.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
       } else {
         listening = true
-        listenThread = thread(name = "voxa-asr") { runListen(promise) }
+        // Keeps the mic on with the screen off or another app open; stopped when runListen ends.
+        try {
+          ListenService.start(context, "Voxa is listening")
+        } catch (e: Throwable) {
+          Log.w(TAG, "could not start the listening service", e)
+        }
+        listenThread = thread(name = "voxa-asr") { runListen(promise, audio) }
       }
     }
 
+    // Resolves once the last sentence has been sent, with how much audio this run heard.
     AsyncFunction("stopListening") { promise: Promise ->
       listening = false
       val t = listenThread
       thread(name = "voxa-asr-stop") {
         t?.join(5000)
-        promise.resolve(null)
+        promise.resolve(mapOf("heardMs" to lastHeardMs.toDouble()))
       }
+    }
+
+    // Speaker labels for a recorded meeting (see SpeakerLabeller). Progress: onLabel events.
+    AsyncFunction("labelSpeakers") { audioPath: String, promise: Promise ->
+      val audio = appFile(audioPath)
+      when {
+        audio == null || !audio.exists() -> promise.reject("E_PATH", "No recording to label", null)
+        labelling -> promise.reject("E_BUSY", "Already labelling a meeting", null)
+        else -> {
+          labelling = true
+          labelCancel = false
+          thread(name = "voxa-label") {
+            try {
+              val turns = runLabel(audio)
+              promise.resolve(turns.map { mapOf("startMs" to it.startMs.toDouble(), "endMs" to it.endMs.toDouble(), "speaker" to it.speaker) })
+            } catch (e: SpeakerLabeller.Cancelled) {
+              promise.reject("E_CANCELLED", "Labelling cancelled", e)
+            } catch (e: Throwable) {
+              Log.e(TAG, "labelling failed", e)
+              promise.reject("E_LABEL", e.message ?: "Could not label speakers", e)
+            } finally {
+              labelling = false
+            }
+          }
+        }
+      }
+    }
+
+    Function("cancelLabel") {
+      labelCancel = true
+      Unit
     }
 
     AsyncFunction("benchmark") { promise: Promise ->
@@ -557,10 +629,18 @@ class VoxaEngineModule : Module() {
   }
 
   @SuppressLint("MissingPermission") // checked in startListening
-  private fun runListen(started: Promise) {
+  private fun runListen(started: Promise, audio: File?) {
     var resolved = false
     var rec: AudioRecord? = null
+    var audioOut: java.io.OutputStream? = null
+    var heard = 0L
+    lastHeardMs = 0L
     try {
+      // Appended, so a paused-then-resumed meeting stays one recording. Buffered 64 KB (~2 s).
+      audioOut = audio?.let {
+        it.parentFile?.mkdirs()
+        java.io.BufferedOutputStream(java.io.FileOutputStream(it, true), 64 * 1024)
+      }
       val r = ensureAsr()
       val minBuf = AudioRecord.getMinBufferSize(ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
       rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, max(minBuf, ASR_RATE))
@@ -572,6 +652,7 @@ class VoxaEngineModule : Module() {
       val vad = newVad()
       val gate = GatedRecognizer(r, vad, ASR_RATE)
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
+      val bytes = ByteArray(buf.size * 2)
       var segment = 0
       // Times come from the audio itself, so they line up with a recording of the session.
       ensurePunct()
@@ -584,6 +665,16 @@ class VoxaEngineModule : Module() {
         while (listening) {
           val n = rec.read(buf, 0, buf.size)
           if (n <= 0) continue
+          heard += n
+          lastHeardMs = heard * 1000 / ASR_RATE
+          audioOut?.let { out ->
+            for (i in 0 until n) {
+              val v = buf[i].toInt()
+              bytes[2 * i] = (v and 0xff).toByte()
+              bytes[2 * i + 1] = ((v shr 8) and 0xff).toByte()
+            }
+            out.write(bytes, 0, n * 2)
+          }
           var sum = 0.0
           val samples = FloatArray(n) { val v = buf[it] / 32768f; sum += v * v; v }
           emitListen("level", mapOf("rms" to sqrt(sum / n)))
@@ -602,7 +693,52 @@ class VoxaEngineModule : Module() {
     } finally {
       try { rec?.stop() } catch (_: Throwable) {}
       rec?.release()
+      try { audioOut?.close() } catch (_: Throwable) {}
       listening = false
+      ListenService.stop(context)
+    }
+  }
+
+  /**
+   * pyannote segmentation + CAM++ embeddings. numClusters = -1: the number of speakers is not
+   * known, so the threshold decides (higher = fewer speakers).
+   */
+  private fun diarConfig(threshold: Float) = OfflineSpeakerDiarizationConfig(
+    segmentation = OfflineSpeakerSegmentationModelConfig(
+      pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(model = "$MODELS/diar/segmentation.onnx"),
+      numThreads = 2,
+    ),
+    embedding = SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
+    clustering = FastClusteringConfig(numClusters = -1, threshold = threshold),
+    minDurationOn = 0.3f,
+    minDurationOff = 0.5f,
+  )
+
+  /** A path inside the app's files folder, or null if it points anywhere else. */
+  private fun appFile(path: String): File? {
+    val root = context.filesDir.canonicalFile
+    val f = File(root, path).canonicalFile
+    return if (f.path.startsWith(root.path + File.separator)) f else null
+  }
+
+  private fun runLabel(audio: File): List<SpeakerLabeller.Turn> {
+    val diar = OfflineSpeakerDiarization(assetManager = context.assets, config = diarConfig(LABEL_THRESHOLD))
+    val extractor = SpeakerEmbeddingExtractor(
+      context.assets,
+      SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
+    )
+    try {
+      var lastSent = -1
+      return SpeakerLabeller(diar, extractor, ASR_RATE).label(audio, { labelCancel }) { fraction ->
+        val pct = (fraction * 100).toInt()
+        if (pct != lastSent) {
+          lastSent = pct
+          sendEvent("onLabel", mapOf("fraction" to fraction))
+        }
+      }
+    } finally {
+      extractor.release()
+      diar.release()
     }
   }
 
@@ -881,20 +1017,7 @@ class VoxaEngineModule : Module() {
     // Speaker labels (pyannote segmentation + CAM++ embeddings) on a clip with four speakers.
     // Runs after a recording ends, so it is timed as a whole, not streamed.
     t0 = SystemClock.elapsedRealtime()
-    val diar = OfflineSpeakerDiarization(
-      assetManager = context.assets,
-      config = OfflineSpeakerDiarizationConfig(
-        segmentation = OfflineSpeakerSegmentationModelConfig(
-          pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(model = "$MODELS/diar/segmentation.onnx"),
-          numThreads = 2,
-        ),
-        embedding = SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
-        // numClusters = -1: the number of speakers is not known, so the threshold decides.
-        clustering = FastClusteringConfig(numClusters = -1, threshold = 0.5f),
-        minDurationOn = 0.3f,
-        minDurationOff = 0.5f,
-      ),
-    )
+    val diar = OfflineSpeakerDiarization(assetManager = context.assets, config = diarConfig(0.5f))
     out["diarLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
     try {
       val clip = WaveReader.readWave(context.assets, "$MODELS/diar/benchmark.wav")

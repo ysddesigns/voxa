@@ -12,7 +12,9 @@ import {
 } from '@expo-google-fonts/inter';
 import { VoxaThemeProvider, useTheme } from '@/design/theme';
 import { EngineProvider } from '@/engines/provider';
+import { ListenSessionProvider } from '@/features/listen/listen-session';
 import { SpeakSessionProvider } from '@/features/speak/speak-session';
+import { sessionStore } from '@/storage';
 import { VoicesProvider } from '@/features/voices/voices-store';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -26,6 +28,7 @@ function Root() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="editor" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="engine-lab" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen
           name="voice-picker"
@@ -62,7 +65,9 @@ export default function RootLayout() {
       <EngineProvider>
         <VoicesProvider>
           <SpeakSessionProvider>
-            <Root />
+            <ListenSessionProvider store={sessionStore}>
+              <Root />
+            </ListenSessionProvider>
           </SpeakSessionProvider>
         </VoicesProvider>
       </EngineProvider>

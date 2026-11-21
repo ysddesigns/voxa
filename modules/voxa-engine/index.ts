@@ -87,6 +87,8 @@ export type NativePackEvent =
   | { id: string; type: 'installed' | 'cancelled' }
   | { id: string; type: 'error'; message: string };
 
+export type NativeSpeakerTurn = { startMs: number; endMs: number; speaker: number };
+
 export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
 
 type VoxaEngineNative = {
@@ -105,8 +107,16 @@ type VoxaEngineNative = {
   ): void;
   stopSpeaking(): void;
   requestMicPermission(): Promise<{ granted: boolean; status: string; canAskAgain?: boolean }>;
-  startListening(): Promise<{ loadMs: number }>;
-  stopListening(): Promise<void>;
+  /**
+   * audioPath (builds with labelSpeakers): "" or a path inside the app's files folder, where the
+   * audio is appended as 16 kHz 16-bit mono PCM. Older builds take no argument.
+   */
+  startListening(audioPath: string): Promise<{ loadMs: number }>;
+  /** Builds with labelSpeakers resolve with the audio this run heard; older ones with null. */
+  stopListening(): Promise<{ heardMs: number } | null>;
+  /** Speaker turns for a recording; progress arrives as onLabel events. Builds from 21 Nov 2026. */
+  labelSpeakers?(audioPath: string): Promise<NativeSpeakerTurn[]>;
+  cancelLabel?(): void;
   benchmark(): Promise<BenchmarkResult>;
   /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */
   startLongTest?(minutes: number): Promise<void>;
@@ -123,6 +133,7 @@ type VoxaEngineNative = {
   storageInfo?(): { freeBytes: number };
   networkInfo?(): { connected: boolean; unmetered: boolean };
   release(): void;
+  addListener(event: 'onLabel', listener: (e: { fraction: number }) => void): EventSubscription;
   addListener(event: 'onPack', listener: (e: NativePackEvent) => void): EventSubscription;
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): EventSubscription;

@@ -27,7 +27,13 @@ export type IconName =
   | 'speaker'
   | 'lock'
   | 'check'
-  | 'stop';
+  | 'stop'
+  | 'flag'
+  | 'trash'
+  | 'scan'
+  | 'settings'
+  | 'sparkle'
+  | 'close';
 
 type Props = {
   name: IconName;
@@ -122,6 +128,17 @@ export function Icon({ name, size = 22, color, strokeWidth = 2, filled = false, 
         </>
       )}
       {name === 'stop' && <Rect x={7} y={7} width={10} height={10} rx={2} fill={color} />}
+      {name === 'flag' && <Path d="M5 21V4M5 4h11l-2 4 2 4H5" {...common} />}
+      {name === 'trash' && <Path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" {...common} />}
+      {name === 'scan' && <Path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 10h8M8 14h5" {...common} />}
+      {name === 'settings' && (
+        <>
+          <Circle cx={12} cy={12} r={3} {...common} />
+          <Path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" {...common} />
+        </>
+      )}
+      {name === 'sparkle' && <Path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.7 1.8 1.8.7-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z" {...common} />}
+      {name === 'close' && <Path d="M6 6l12 12M18 6L6 18" {...common} />}
       {name === 'back15' && (
         <>
           <Path d="M12 4a8 8 0 1 1-7.4 5" {...common} strokeWidth={1.7} />

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/icons';
@@ -8,12 +9,27 @@ import { useDeviceTier } from '@/device/use-device-tier';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
+import { formatDay, formatDuration } from '@/features/listen/format';
+import { useListen } from '@/features/listen/listen-session';
+import { sessionStore } from '@/storage';
+import type { SessionMeta } from '@/storage/sessions';
 
-const RECENT: { id: string; title: string; meta: string; icon: IconName }[] = [
-  { id: 'r1', title: 'Weekly sync', meta: 'Transcript · 32 min · 4 speakers', icon: 'live' },
-  { id: 'r2', title: 'Pharmacy questions', meta: 'Spoken · Lily · 1 min', icon: 'chat' },
-  { id: 'r3', title: 'Lecture: Market structures', meta: 'Transcript · 48 min', icon: 'live' },
-];
+/** The three newest saved sessions. */
+function useRecent(): SessionMeta[] {
+  const { version, status } = useListen();
+  const [recent, setRecent] = useState<SessionMeta[]>([]);
+  useEffect(() => {
+    let live = true;
+    sessionStore
+      .list()
+      .then((list) => live && setRecent(list.filter((s) => s.status !== 'recording').slice(0, 3)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [version, status]);
+  return recent;
+}
 
 function greeting(d: Date): string {
   const h = d.getHours();
@@ -26,6 +42,7 @@ export default function Home() {
   const { colors } = useTheme();
   const router = useRouter();
   const tier = useDeviceTier();
+  const recent = useRecent();
   const now = new Date();
   const overline = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -86,22 +103,32 @@ export default function Home() {
         </Link>
       </View>
       <View style={[styles.list, { backgroundColor: colors.card }]}>
-        {RECENT.map((item, i) => (
-          <View
+        {recent.length === 0 ? (
+          <Text style={[type.callout, { color: colors.textTertiary, paddingVertical: 16 }]}>
+            Nothing saved yet. Meetings you listen to appear here.
+          </Text>
+        ) : null}
+        {recent.map((item, i) => (
+          <Pressable
             key={item.id}
-            style={[
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/session/[id]', params: { id: item.id } })}
+            style={({ pressed }) => [
               styles.row,
               i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
+              pressed && { opacity: 0.6 },
             ]}
           >
             <View style={[styles.rowIcon, { backgroundColor: colors.warning }]}>
-              <Icon name={item.icon} size={18} color={colors.accentText} />
+              <Icon name="live" size={18} color={colors.accentText} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.bodyStrong, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[type.caption, { color: colors.textTertiary }]}>{item.meta}</Text>
+              <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[type.caption, { color: colors.textTertiary }]}>
+                {`${formatDay(item.startedAt)} · ${formatDuration(item.durationMs)}${item.speakers ? ` · ${item.speakers} speakers` : ''}`}
+              </Text>
             </View>
-          </View>
+          </Pressable>
         ))}
       </View>
     </Screen>

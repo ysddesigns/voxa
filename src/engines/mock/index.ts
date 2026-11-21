@@ -104,7 +104,10 @@ export function createMockEngines(): Engines {
 
     speech: {
       async start(onEvent: (e: ListenEvent) => void): Promise<ListenSession> {
-        const startedAt = Date.now();
+        // Listened time: the clock stops while paused, like the native engine.
+        let offsetMs = 0;
+        let runStartedAt = Date.now();
+        const elapsed = () => (paused ? offsetMs : offsetMs + Date.now() - runStartedAt);
         const segments: TranscriptSegment[] = [];
         let paused = false;
         let line = 0;
@@ -114,30 +117,29 @@ export function createMockEngines(): Engines {
         const lineTimer = setInterval(() => {
           if (paused || line >= SCRIPT.length) return;
           const { speaker, text } = SCRIPT[line];
-          const seg: TranscriptSegment = {
-            id: `s${line}`,
-            speaker,
-            text,
-            startMs: Date.now() - startedAt,
-            endMs: Date.now() - startedAt + 2500,
-            final: true,
-          };
+          const at = elapsed();
+          const seg: TranscriptSegment = { id: `s${line}`, speaker, text, startMs: Math.max(0, at - 2500), endMs: at, final: true };
           onEvent({ type: 'segment', segment: { ...seg, final: false, text: text.split(' ').slice(0, 4).join(' ') } });
           onEvent({ type: 'segment', segment: seg });
           segments.push(seg);
           line++;
         }, 3000);
         return {
-          pause() {
+          async pause() {
+            if (paused) return;
+            offsetMs = elapsed();
             paused = true;
             onEvent({ type: 'paused', reason: 'user' });
           },
-          resume() {
+          async resume() {
+            if (!paused) return;
+            runStartedAt = Date.now();
             paused = false;
             onEvent({ type: 'resumed' });
           },
+          elapsedMs: elapsed,
           mark() {
-            return { atMs: Date.now() - startedAt };
+            return { atMs: elapsed() };
           },
           async stop() {
             clearInterval(levelTimer);

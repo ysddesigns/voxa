@@ -1,10 +1,11 @@
-import { VoxaEngine, type NativeListenEvent, type NativeSpeakEvent } from '../../../modules/voxa-engine';
+import { VoxaEngine, type NativeSpeakEvent } from '../../../modules/voxa-engine';
 import { pronunciationHints } from '@/features/pronounce/hints';
 import { packBytes, type Pack } from '@/features/packs/catalogue';
 import { catalogueVoices, packService } from '@/features/packs/packs';
 import { verdictMessage } from '@/features/packs/rules';
 import { createMockEngines } from '../mock';
-import type { Engines, ListenEvent, ListenSession, SpeakEvent, SpeakHandle, TranscriptSegment, Voice } from '../types';
+import type { Engines, ListenEvent, ListenOptions, SpeakEvent, SpeakHandle, Voice } from '../types';
+import { nativeLabelSpeakers, startNativeListen } from './listen';
 
 /**
  * On-device engines backed by modules/voxa-engine (sherpa-onnx). Android only for now:
@@ -33,15 +34,7 @@ export function packVoice(pack: Pack, installed: boolean): Voice {
   };
 }
 
-/**
- * The Zipformer model writes in capitals ("HELLO THERE"); make it read like a sentence.
- * Finished sentences already come punctuated and cased by the native module: leave those alone.
- */
-export function tidyTranscript(text: string): string {
-  if (text !== text.toUpperCase()) return text;
-  const lower = text.toLowerCase().replace(/\bi\b/g, 'I').replace(/\bi'(m|ll|ve|d)\b/g, "I'$1");
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
+export { tidyTranscript } from './text';
 
 /** The voices built into the app: one per speaker in the on-device model. */
 export function deviceVoices(count: number): Voice[] {
@@ -149,55 +142,10 @@ export function getNativeEngines(): Engines | null {
     },
 
     speech: {
-      async start(onEvent: (e: ListenEvent) => void): Promise<ListenSession> {
-        const perm = await native.requestMicPermission();
-        if (!perm.granted) throw new Error('Voxa needs the microphone to listen.');
-        const startedAt = Date.now();
-        const finals = new Map<number, TranscriptSegment>();
-        let paused = false;
-        const sub = native.addListener('onListen', (e: NativeListenEvent) => {
-          if (paused) return;
-          if (e.type === 'level') onEvent({ type: 'level', rms: e.rms });
-          else if (e.type === 'error') onEvent({ type: 'error', message: e.message });
-          else {
-            const segment: TranscriptSegment = {
-              id: `n${e.index}`,
-              speaker: null,
-              text: tidyTranscript(e.text),
-              startMs: e.startMs,
-              endMs: e.endMs,
-              final: e.final,
-            };
-            if (e.final) finals.set(e.index, segment);
-            onEvent({ type: 'segment', segment });
-          }
-        });
-        try {
-          await native.startListening();
-        } catch (err) {
-          sub.remove();
-          throw err;
-        }
-        return {
-          // Spike: pause drops results but keeps the mic open. Real pause/resume comes with the Live screen.
-          pause() {
-            paused = true;
-            onEvent({ type: 'paused', reason: 'user' });
-          },
-          resume() {
-            paused = false;
-            onEvent({ type: 'resumed' });
-          },
-          mark() {
-            return { atMs: Date.now() - startedAt };
-          },
-          async stop() {
-            await native.stopListening();
-            sub.remove();
-            return [...finals.values()].sort((a, b) => a.startMs - b.startMs);
-          },
-        };
-      },
+      start: (onEvent: (e: ListenEvent) => void, options?: ListenOptions) => startNativeListen(native, onEvent, options),
+      ...(native.labelSpeakers
+        ? { labelSpeakers: (audioPath: string, onProgress?: (f: number) => void) => nativeLabelSpeakers(native, audioPath, onProgress) }
+        : {}),
     },
 
     scan: mock.scan,
