@@ -11,12 +11,13 @@
   Sources (all from https://github.com/k2-fsa/sherpa-onnx/releases):
     sherpa-onnx-2.0.1.aar                                           Apache-2.0
     sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2  Apache-2.0
-    kitten-nano-en-v0_8-int8.tar.bz2  Apache-2.0 model; includes espeak-ng data (GPL-3.0)
+    kitten-nano-en-v0_8-int8.tar.bz2                                Apache-2.0
+    lexicon-en-us.txt   English pronunciations for Kitten (built from CMUdict)
     silero_vad_v5.onnx                                              MIT
 
-  LICENCE NOTE: espeak-ng (GPL-3.0) is used for Kitten phonemes. Builds made
-  with these files are for internal testing only until the espeak-ng legal
-  question in the PRD is answered.
+  sherpa-onnx 2.x no longer uses espeak-ng (GPL-3.0). Kitten reads words through
+  lexicon-en-us.txt instead; the espeak-ng-data folder in the Kitten package is
+  not copied into the app. Words missing from the lexicon are not spoken yet.
 #>
 param(
   [string]$SherpaVersion = '2.0.1',
@@ -35,6 +36,7 @@ $files = @(
   @{ Key = 'aar';  Url = "$base/v$SherpaVersion/sherpa-onnx-$SherpaVersion.aar";                                      Name = "sherpa-onnx-$SherpaVersion.aar" },
   @{ Key = 'asr';  Url = "$base/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2";          Name = 'sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2' },
   @{ Key = 'tts';  Url = "$base/tts-models/kitten-nano-en-v0_8-int8.tar.bz2";                                         Name = 'kitten-nano-en-v0_8-int8.tar.bz2' },
+  @{ Key = 'lex';  Url = "$base/tts-models/lexicon-en-us.txt";                                                  Name = 'lexicon-en-us.txt' },
   @{ Key = 'vad';  Url = "$base/asr-models/silero_vad_v5.onnx";                                                       Name = 'silero_vad_v5.onnx' }
 )
 
@@ -103,9 +105,7 @@ $model = Get-ChildItem $tts.FullName -Filter '*.onnx' | Select-Object -First 1
 Copy-Item $model.FullName (Join-Path $ttsDst 'model.onnx')
 Copy-Item (Join-Path $tts.FullName 'voices.bin') $ttsDst
 Copy-Item (Join-Path $tts.FullName 'tokens.txt') $ttsDst
-Copy-Item -Recurse (Join-Path $tts.FullName 'espeak-ng-data') $ttsDst
-# Kitten is English-only: keep the English dictionary, drop the other ~100 languages.
-Get-ChildItem (Join-Path $ttsDst 'espeak-ng-data') -Filter '*_dict' | Where-Object Name -ne 'en_dict' | Remove-Item
+Copy-Item (Join-Path $cache 'downloads\lex\lexicon-en-us.txt') (Join-Path $ttsDst 'lexicon.txt')
 
 Step 'Installing the voice activity detector'
 $vadDst = Fresh (Join-Path $assets 'vad')

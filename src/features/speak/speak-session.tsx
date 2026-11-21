@@ -32,6 +32,8 @@ type SpeakValue = {
   rate: number;
   cycleRate: () => void;
   status: PlayStatus;
+  /** Why the last play failed, shown under the script. Cleared on the next play. */
+  error: string | null;
   /** Word being spoken, or where playback will resume. */
   wordIndex: number;
   positionMs: number;
@@ -61,6 +63,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const [voiceId, setVoiceIdState] = useState<string | null>(null);
   const [rate, setRate] = useState(1);
   const [status, setStatus] = useState<PlayStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
   const [wordIndex, setWordIndex] = useState(0);
 
   const words = useMemo(() => tokenize(text), [text]);
@@ -85,10 +88,15 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       const offset = words[start].start;
       const gen = generation.current;
       setWordIndex(start);
+      setError(null);
       setStatus('playing');
       handle.current = engine.speak(text.slice(offset), { voiceId: withVoice, rate: atRate }, (e) => {
         if (gen !== generation.current) return;
         if (e.type === 'word') setWordIndex(wordAtChar(words, e.charStart + offset));
+        if (e.type === 'error') {
+          console.warn('Voxa speak failed:', e.message);
+          setError(e.message);
+        }
         if (e.type === 'end' || e.type === 'error') {
           handle.current = null;
           setStatus('idle');
@@ -176,6 +184,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     rate,
     cycleRate,
     status,
+    error,
     wordIndex,
     positionMs: position,
     durationMs: total,

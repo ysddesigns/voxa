@@ -123,6 +123,11 @@ export default function Editor() {
               <Icon name="check" size={13} color={colors.accent} onColor={colors.onAccent} />
               <Text style={[type.caption, { color: colors.textTertiary }]}>Works offline</Text>
             </View>
+            {s.error && (
+              <Text style={[type.caption, { color: colors.warning }]} accessibilityLiveRegion="polite">
+                {`Couldn't play: ${s.error}`}
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>

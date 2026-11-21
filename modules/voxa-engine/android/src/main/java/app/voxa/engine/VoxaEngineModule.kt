@@ -12,6 +12,7 @@ import android.media.MediaRecorder
 import android.os.Build
 import android.os.Debug
 import android.os.SystemClock
+import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -27,7 +28,6 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import java.io.File
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -35,9 +35,9 @@ import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.sqrt
 
+private const val TAG = "VoxaEngine"
 private const val MODELS = "voxa-models"
 private const val ASR_RATE = 16000
-private const val ASSET_COPY_VERSION = "1"
 private val WORD = Regex("\\S+")
 private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
 
@@ -78,6 +78,7 @@ class VoxaEngineModule : Module() {
           val t = ensureTts()
           promise.resolve(mapOf("sampleRate" to t.sampleRate(), "numSpeakers" to t.numSpeakers(), "loadMs" to ttsLoadMs.toDouble()))
         } catch (e: Throwable) {
+          Log.e(TAG, "voice load failed", e)
           promise.reject("E_TTS_LOAD", e.message ?: "Could not load the voice", e)
         }
       }
@@ -148,15 +149,14 @@ class VoxaEngineModule : Module() {
   private fun ensureTts(): OfflineTts = synchronized(lock) {
     tts?.let { return it }
     val t0 = SystemClock.elapsedRealtime()
-    // espeak-ng reads its data with plain file I/O, so it must live on disk, not in the APK.
-    val dataDir = copyAssetDir("$MODELS/tts/espeak-ng-data")
     val config = OfflineTtsConfig(
       model = OfflineTtsModelConfig(
         kitten = OfflineTtsKittenModelConfig(
           model = "$MODELS/tts/model.onnx",
           voices = "$MODELS/tts/voices.bin",
           tokens = "$MODELS/tts/tokens.txt",
-          dataDir = dataDir,
+          // sherpa-onnx 2.x has no espeak-ng: words are looked up in this lexicon.
+          lexicon = "$MODELS/tts/lexicon.txt",
         ),
         numThreads = 2,
         debug = false,
@@ -166,6 +166,7 @@ class VoxaEngineModule : Module() {
     )
     val created = OfflineTts(assetManager = context.assets, config = config)
     ttsLoadMs = SystemClock.elapsedRealtime() - t0
+    Log.i(TAG, "voice loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz")
     tts = created
     created
   }
@@ -197,28 +198,6 @@ class VoxaEngineModule : Module() {
   private fun releaseModels() = synchronized(lock) {
     tts?.release(); tts = null
     recognizer?.release(); recognizer = null
-  }
-
-  /** Copies an asset folder to filesDir once per ASSET_COPY_VERSION and returns its path. */
-  private fun copyAssetDir(path: String): String {
-    val target = File(context.filesDir, path)
-    val marker = File(target, ".copied-v$ASSET_COPY_VERSION")
-    if (marker.exists()) return target.absolutePath
-    target.deleteRecursively()
-    copyAsset(path, target)
-    marker.writeText(ASSET_COPY_VERSION)
-    return target.absolutePath
-  }
-
-  private fun copyAsset(path: String, target: File) {
-    val children = context.assets.list(path) ?: emptyArray()
-    if (children.isEmpty()) {
-      target.parentFile?.mkdirs()
-      context.assets.open(path).use { input -> target.outputStream().use { input.copyTo(it) } }
-    } else {
-      target.mkdirs()
-      children.forEach { copyAsset("$path/$it", File(target, it)) }
-    }
   }
 
   // --- Speak ---------------------------------------------------------------------
@@ -281,6 +260,7 @@ class VoxaEngineModule : Module() {
       while (live() && !queue.offer(endOfSpeech, 50, TimeUnit.MILLISECONDS)) { /* wait */ }
       player.join()
     } catch (e: Throwable) {
+      Log.e(TAG, "speak failed", e)
       if (live()) emitSpeak(id, "error", mapOf("message" to (e.message ?: "Speech failed")))
     }
   }
@@ -332,6 +312,7 @@ class VoxaEngineModule : Module() {
       while (live() && emitDue() < written && SystemClock.elapsedRealtime() < deadline) Thread.sleep(20)
       finished = live()
     } catch (e: Throwable) {
+      Log.e(TAG, "playback failed", e)
       if (live()) emitSpeak(id, "error", mapOf("message" to (e.message ?: "Playback failed")))
     } finally {
       try { track.pause(); track.flush() } catch (_: Throwable) {}
@@ -395,6 +376,7 @@ class VoxaEngineModule : Module() {
       if (text.isNotEmpty()) emitSegment(segment, text, segStart, SystemClock.elapsedRealtime() - t0, true)
       stream.release()
     } catch (e: Throwable) {
+      Log.e(TAG, "listen failed", e)
       if (!resolved) started.reject("E_LISTEN", e.message ?: "Could not start listening", e)
       else emitListen("error", mapOf("message" to (e.message ?: "Listening failed")))
     } finally {

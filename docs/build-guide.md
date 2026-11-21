@@ -124,11 +124,11 @@ The on-device voice and listening engine (`modules/voxa-engine`) needs the sherp
 powershell -ExecutionPolicy Bypass -File .\scripts\fetch-engine.ps1
 ```
 
-The script downloads into `.engine-cache\` and copies only what the app needs into the module: the phone ABIs (`arm64-v8a`, `armeabi-v7a`), the int8 speech model, the Kitten voice and the English espeak-ng data. Run it again with `-Force` to download fresh copies. After fetching for the first time, build with `-Prebuild` so the module is linked into the app.
+The script downloads into `.engine-cache\` and copies only what the app needs into the module: the phone ABIs (`arm64-v8a`, `armeabi-v7a`), the int8 speech model, the Kitten voice and its English lexicon (`lexicon-en-us.txt`, about 168,000 words). Run it again with `-Force` to download fresh copies. After fetching for the first time, build with `-Prebuild` so the module is linked into the app.
 
 Without these files the Android build stops with "modules/voxa-engine is missing sherpa-onnx". iOS builds don't use the module yet and fall back to the mock engines.
 
-> Licence: the Kitten voice uses espeak-ng data, which is GPL-3.0. Builds that include it are for internal testing only until legal clears it.
+> sherpa-onnx 2.x no longer uses espeak-ng (GPL-3.0). The Kitten voice looks words up in the lexicon instead, so words missing from it (many names) are not spoken yet.
 
 ---
 

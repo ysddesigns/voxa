@@ -135,7 +135,7 @@ export default function EngineLab() {
         Engine lab
       </Text>
       <Text style={[type.caption, { color: colors.textTertiary }]}>
-        Internal test build. The device voice uses espeak-ng (GPL-3.0) and must not ship until legal clears it.
+        Internal test build. The device voice reads words from an English dictionary: words it does not know, like many names, are skipped for now.
       </Text>
 
       {/* Engine switch */}
