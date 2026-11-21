@@ -91,6 +91,9 @@ class VoxaEngineModule : Module() {
   private var tts: OfflineTts? = null
   private var tokenizer: KittenTokenizer? = null
   private var ttsLoadMs = 0L
+  private var ttsVoice = ""
+  /** Held while a voice generates audio, so it is never freed mid-sentence. */
+  private val genLock = Any()
   private var recognizer: OnlineRecognizer? = null
   private var asrLoadMs = 0L
   private var punct: OnlinePunctuation? = null
@@ -114,10 +117,12 @@ class VoxaEngineModule : Module() {
     Name("VoxaEngine")
     Events("onSpeak", "onListen", "onLongTest", "onPack")
 
-    AsyncFunction("loadVoice") { promise: Promise ->
+    // Warms up a voice ("" = built-in, else a pack id). Does not replace a voice already loaded,
+    // so opening the Voices screen never interrupts speech in another voice.
+    AsyncFunction("loadVoice") { voice: String, promise: Promise ->
       thread(name = "voxa-tts-load") {
         try {
-          val t = ensureTts()
+          val t = synchronized(lock) { tts } ?: ensureTts(voice)
           promise.resolve(mapOf("sampleRate" to t.sampleRate(), "numSpeakers" to t.numSpeakers(), "loadMs" to ttsLoadMs.toDouble()))
         } catch (e: Throwable) {
           Log.e(TAG, "voice load failed", e)
@@ -128,9 +133,10 @@ class VoxaEngineModule : Module() {
 
     // Starts speaking and returns at once; progress arrives as onSpeak events with this id.
     // overrides win over the English lexicon; fallbacks are used only for words it lacks.
-    Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String> ->
+    // voice: "" for the built-in voice, or the id of an installed voice pack.
+    Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String ->
       val gen = speakGen.incrementAndGet()
-      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks) }
+      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice) }
       Unit
     }
 
@@ -253,21 +259,41 @@ class VoxaEngineModule : Module() {
 
   // --- Models ------------------------------------------------------------------
 
-  private fun ensureTts(): OfflineTts = synchronized(lock) {
-    tts?.let { return it }
+  /**
+   * The voice to speak with: "" = built-in Piper LJSpeech medium (VITS, public-domain recordings,
+   * chosen over Kitten in Phase 0: first audio 0.55 s vs 1.48 s on a Redmi Note 13), or the id of
+   * an installed Piper voice pack. One voice is kept in memory; asking for another replaces it.
+   * No lexicon or espeak-ng in sherpa: KittenTokenizer reads the lexicon and passes tokens.
+   */
+  private fun ensureTts(voice: String = ""): OfflineTts = synchronized(lock) {
+    tts?.let { if (ttsVoice == voice) return it }
     val t0 = SystemClock.elapsedRealtime()
-    // The speaking voice: Piper LJSpeech medium (VITS, public-domain recordings). Chosen over
-    // Kitten in Phase 0: first audio 0.55 s vs 1.48 s on a Redmi Note 13.
-    // No lexicon or espeak-ng here: KittenTokenizer reads the lexicon and passes tokens.
-    val created = OfflineTts(assetManager = context.assets, config = piperConfig("$MODELS/voice"))
-    val assets = context.assets
-    tokenizer = KittenTokenizer(
-      assets.open("$MODELS/tts/lexicon.txt").bufferedReader(Charsets.UTF_8),
-      assets.open("$MODELS/voice/tokens.txt").bufferedReader(Charsets.UTF_8),
-    )
+    val created: OfflineTts
+    val tokens: java.io.BufferedReader
+    if (voice.isEmpty()) {
+      created = OfflineTts(assetManager = context.assets, config = piperConfig("$MODELS/voice"))
+      tokens = context.assets.open("$MODELS/voice/tokens.txt").bufferedReader(Charsets.UTF_8)
+    } else {
+      val dir = packs.dir(voice)
+      if (!java.io.File(dir, "model.onnx").isFile || !java.io.File(dir, "tokens.txt").isFile) {
+        throw IllegalStateException("Voice pack $voice is not installed")
+      }
+      created = OfflineTts(assetManager = null, config = piperConfig(dir.path))
+      tokens = java.io.File(dir, "tokens.txt").bufferedReader(Charsets.UTF_8)
+    }
+    // The lexicon is the same for every voice: read it once, then only swap the token list.
+    tokenizer = tokenizer?.withTokens(tokens)
+      ?: KittenTokenizer(context.assets.open("$MODELS/tts/lexicon.txt").bufferedReader(Charsets.UTF_8), tokens)
+    val old = tts
+    if (old != null) {
+      // Older speech was already stopped by the speak call that asked for this voice; wait for
+      // any sentence it is still generating, then free the old voice.
+      synchronized(genLock) { old.release() }
+    }
     ttsLoadMs = SystemClock.elapsedRealtime() - t0
-    Log.i(TAG, "voice loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz, ${tokenizer?.size} lexicon words")
+    Log.i(TAG, "voice '${voice.ifEmpty { "built-in" }}' loaded in ${ttsLoadMs} ms: ${created.numSpeakers()} voices at ${created.sampleRate()} Hz, ${tokenizer?.size} lexicon words")
     tts = created
+    ttsVoice = voice
     created
   }
 
@@ -352,7 +378,7 @@ class VoxaEngineModule : Module() {
 
   private fun releaseModels() = synchronized(lock) {
     punct?.release(); punct = null; punctTried = false
-    tts?.release(); tts = null; tokenizer = null
+    synchronized(genLock) { tts?.release() }; tts = null; tokenizer = null; ttsVoice = ""
     recognizer?.release(); recognizer = null
   }
 
@@ -394,19 +420,24 @@ class VoxaEngineModule : Module() {
     fallbacks: Map<String, String> = emptyMap(),
     skipped: MutableCollection<String>? = null,
     tk: KittenTokenizer = tokenizer ?: throw IllegalStateException("The voice is not loaded"),
+    /** False once this speech was stopped or its voice replaced: then nothing is generated. */
+    alive: () -> Boolean = { true },
   ): GeneratedAudio? {
     val tokens = tk.tokenize(text, overrides, fallbacks, skipped)
     // Only spaces and punctuation means nothing to say.
     if (tokens.none { t -> t.any { it.isLetter() } }) return null
     val cfg = GenerationConfig(sid = sid, speed = speed, tokens = arrayOf(tokens.toTypedArray()))
-    val audio = engine.generateWithConfig(text, cfg)
+    val audio = synchronized(genLock) {
+      if (!alive()) return null
+      engine.generateWithConfig(text, cfg)
+    }
     return if (audio.samples.isEmpty()) null else audio
   }
 
-  private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float, overrides: Map<String, String>, fallbacks: Map<String, String>) {
+  private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String) {
     fun live() = speakGen.get() == gen
     try {
-      val engine = ensureTts()
+      val engine = ensureTts(voice)
       if (!live()) return
       val words = WORD.findAll(text).toList()
       val sentences = splitSentences(text)
@@ -441,7 +472,7 @@ class VoxaEngineModule : Module() {
       val skipped = LinkedHashSet<String>()
       for (s in sentences) {
         if (!live()) break
-        val audio = synth(engine, s.text, sid, speed, overrides, fallbacks, skipped)
+        val audio = synth(engine, s.text, sid, speed, overrides, fallbacks, skipped, alive = ::live)
         if (first) {
           first = false
           emitSpeak(id, "metrics", mapOf("firstAudioMs" to (SystemClock.elapsedRealtime() - t0).toDouble()))

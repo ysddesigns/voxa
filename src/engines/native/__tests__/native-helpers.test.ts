@@ -1,4 +1,5 @@
-import { deviceVoices, getNativeEngines, speakerId, tidyTranscript } from '../index';
+import { DEV_CATALOGUE } from '@/features/packs/catalogue';
+import { deviceVoices, getNativeEngines, packIdOf, packVoice, speakerId, tidyTranscript } from '../index';
 
 describe('native engine helpers', () => {
   it('turns capitalised Zipformer output into a sentence', () => {
@@ -25,6 +26,15 @@ describe('native engine helpers', () => {
     expect(v.map((x) => x.id)).toEqual(['device-0', 'device-1', 'device-2']);
     expect(v.every((x) => x.installed)).toBe(true);
     expect(deviceVoices(1).map((x) => x.name)).toEqual(['Standard']);
+  });
+
+  it('names downloaded voices after their pack', () => {
+    const cori = DEV_CATALOGUE.packs.find((p) => p.id === 'cori-medium')!;
+    const v = packVoice(cori, false);
+    expect(v).toMatchObject({ id: 'pack-cori-medium', name: 'Cori', installed: false, sizeMB: 61 });
+    expect(packIdOf(v.id)).toBe('cori-medium');
+    expect(packIdOf('device-0')).toBe('');
+    expect(speakerId(v.id)).toBe(0);
   });
 
   it('is unavailable when the native module is not in the build (Jest)', () => {

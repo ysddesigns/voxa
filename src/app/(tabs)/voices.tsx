@@ -12,7 +12,7 @@ import { Waveform } from '@/components/waveform';
 
 export default function VoicesScreen() {
   const { colors } = useTheme();
-  const { voices, defaultId, downloads, download, cancelDownload } = useVoices();
+  const { voices, defaultId, downloads, download, cancelDownload, downloadErrors } = useVoices();
   const [filter, setFilter] = useState<VoiceFilter>('All');
   const [query, setQuery] = useState('');
 
@@ -92,6 +92,9 @@ export default function VoicesScreen() {
                       ? `${v.tags.join(' · ')} · ${Math.round(p * v.sizeMB)} of ${v.sizeMB} MB`
                       : voiceSubtitle(v, true)}
                   </Text>
+                  {!busy && downloadErrors[v.id] && (
+                    <Text style={[type.caption, { color: colors.warning }]}>{downloadErrors[v.id]}</Text>
+                  )}
                 </View>
                 <Pressable
                   onPress={() => (busy ? cancelDownload(v.id) : download(v.id))}

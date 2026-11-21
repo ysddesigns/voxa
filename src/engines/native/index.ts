@@ -1,5 +1,8 @@
 import { VoxaEngine, type NativeListenEvent, type NativeSpeakEvent } from '../../../modules/voxa-engine';
 import { pronunciationHints } from '@/features/pronounce/hints';
+import { packBytes, type Pack } from '@/features/packs/catalogue';
+import { catalogueVoices, packService } from '@/features/packs/packs';
+import { verdictMessage } from '@/features/packs/rules';
 import { createMockEngines } from '../mock';
 import type { Engines, ListenEvent, ListenSession, SpeakEvent, SpeakHandle, TranscriptSegment, Voice } from '../types';
 
@@ -11,6 +14,24 @@ import type { Engines, ListenEvent, ListenSession, SpeakEvent, SpeakHandle, Tran
 const VOICE_PREFIX = 'device-';
 /** Ids saved by builds that used the Kitten voice still map to speaker 0. */
 const OLD_PREFIX = 'kitten-';
+/** Downloaded voices: "pack-<pack id>". */
+const PACK_PREFIX = 'pack-';
+
+/** The voice pack a voice id belongs to, or "" for a built-in voice. */
+export function packIdOf(voiceId: string): string {
+  return voiceId.startsWith(PACK_PREFIX) ? voiceId.slice(PACK_PREFIX.length) : '';
+}
+
+export function packVoice(pack: Pack, installed: boolean): Voice {
+  return {
+    id: `${PACK_PREFIX}${pack.id}`,
+    name: pack.name,
+    tags: pack.tags,
+    sizeMB: Math.round(packBytes(pack) / (1024 * 1024)),
+    variant: 'full',
+    installed,
+  };
+}
 
 /**
  * The Zipformer model writes in capitals ("HELLO THERE"); make it read like a sentence.
@@ -57,14 +78,22 @@ export function getNativeEngines(): Engines | null {
   cached = {
     voice: {
       async listVoices() {
-        const { numSpeakers } = await native.loadVoice();
-        return deviceVoices(numSpeakers);
+        // Warm up the built-in voice in the background (a few seconds); the list does not wait.
+        native.loadVoice('').catch(() => {});
+        const installed = packService?.installed() ?? new Set<string>();
+        const downloadable = packService ? catalogueVoices() : [];
+        return [...deviceVoices(1), ...downloadable.map((p) => packVoice(p, installed.has(p.id)))];
       },
 
-      downloadVoice(id) {
-        // Built-in voices ship inside the app; real voice packs come with the download service.
-        const done = id.startsWith(VOICE_PREFIX) || id.startsWith(OLD_PREFIX) ? Promise.resolve() : Promise.reject(new Error('Voice packs are not available yet'));
-        return { cancel() {}, done };
+      downloadVoice(id, onProgress) {
+        const packId = packIdOf(id);
+        // Built-in voices ship inside the app.
+        if (!packId) return { cancel() {}, done: Promise.resolve() };
+        const pack = catalogueVoices().find((p) => p.id === packId);
+        if (!pack || !packService) return { cancel() {}, done: Promise.reject(new Error('This voice is not available to download')) };
+        const verdict = packService.check(pack, false);
+        if (!verdict.ok) return { cancel() {}, done: Promise.reject(new Error(verdictMessage(verdict) ?? 'Cannot download now')) };
+        return packService.install(pack, onProgress);
       },
 
       speak(text, options, onEvent?: (e: SpeakEvent) => void): SpeakHandle {
@@ -102,7 +131,7 @@ export function getNativeEngines(): Engines | null {
         });
         // Yoruba, Igbo and Hausa words get pronunciations from the spelling rules.
         const { overrides, fallbacks } = pronunciationHints(text);
-        native.speak(id, text, speakerId(options.voiceId), options.rate ?? 1, overrides, fallbacks);
+        native.speak(id, text, speakerId(options.voiceId), options.rate ?? 1, overrides, fallbacks, packIdOf(options.voiceId));
         return {
           stop() {
             if (finished) return;

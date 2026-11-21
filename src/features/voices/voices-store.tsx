@@ -20,6 +20,8 @@ type VoicesValue = {
   downloads: Readonly<Record<string, number>>;
   download: (id: string) => void;
   cancelDownload: (id: string) => void;
+  /** id → why the last download failed (not set when the person cancelled). */
+  downloadErrors: Readonly<Record<string, string>>;
   previewingId: string | null;
   togglePreview: (id: string) => void;
   byId: (id: string) => Voice | undefined;
@@ -36,6 +38,7 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
   const [defaultId, setDefault] = useState('lily');
   const [favourites, setFavourites] = useState<ReadonlySet<string>>(new Set(['lily']));
   const [downloads, setDownloads] = useState<Record<string, number>>({});
+  const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({});
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const handles = useRef<Record<string, DownloadHandle>>({});
   const preview = useRef<SpeakHandle | null>(null);
@@ -82,6 +85,7 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
   const download = useCallback(
     (id: string) => {
       if (handles.current[id]) return;
+      setDownloadErrors(({ [id]: _, ...rest }) => rest);
       setDownloads((d) => ({ ...d, [id]: 0 }));
       const h = engine.downloadVoice(id, (f) => setDownloads((d) => (id in d ? { ...d, [id]: f } : d)));
       handles.current[id] = h;
@@ -89,7 +93,15 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
         delete handles.current[id];
         setDownloads(({ [id]: _, ...rest }) => rest);
       };
-      h.done.then(() => refresh()).then(clear, clear);
+      h.done
+        .then(
+          () => refresh(),
+          (e: unknown) => {
+            const message = e instanceof Error ? e.message : String(e);
+            if (!/cancel/i.test(message)) setDownloadErrors((m) => ({ ...m, [id]: message }));
+          },
+        )
+        .then(clear, clear);
     },
     [engine, refresh],
   );
@@ -127,11 +139,12 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
       downloads,
       download,
       cancelDownload,
+      downloadErrors,
       previewingId,
       togglePreview,
       byId: (id) => voices.find((v) => v.id === id),
     }),
-    [voices, loading, defaultId, favourites, toggleFavourite, downloads, download, cancelDownload, previewingId, togglePreview],
+    [voices, loading, defaultId, favourites, toggleFavourite, downloads, download, cancelDownload, downloadErrors, previewingId, togglePreview],
   );
 
   return <VoicesContext.Provider value={value}>{children}</VoicesContext.Provider>;

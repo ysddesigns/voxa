@@ -3,7 +3,8 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { nativeBenchmark } from '@/engines/native';
 import { parseLongTest, summarizeLongTest, type LongTestSummary } from '@/engines/native/long-test';
 import { DEV_CATALOGUE } from '@/features/packs/catalogue';
-import { PackService, type InstallHandle, type PackNative } from '@/features/packs/pack-service';
+import { packService } from '@/features/packs/packs';
+import type { InstallHandle } from '@/features/packs/pack-service';
 import { formatMB, verdictMessage } from '@/features/packs/rules';
 import { useEngineMode, useEngines } from '@/engines/provider';
 import type { ListenSession, SpeakHandle, TranscriptSegment } from '@/engines/types';
@@ -20,8 +21,7 @@ import { VoxaEngine, type BenchmarkResult } from '../../modules/voxa-engine';
 
 const LONG_TEST_MINUTES = 60;
 
-const packService = VoxaEngine?.installPack ? new PackService(VoxaEngine as unknown as PackNative) : null;
-const TEST_PACK = DEV_CATALOGUE.packs[0];
+const TEST_PACK = DEV_CATALOGUE.packs.find((p) => p.kind === 'test')!;
 
 function longTestRows(s: LongTestSummary): Row[] {
   const n = (x: number, d = 0) => x.toFixed(d);

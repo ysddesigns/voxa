@@ -90,10 +90,36 @@ const TIER_RANK: Record<Tier, number> = { lite: 0, standard: 1, pro: 2 };
 
 export const runsOn = (p: Pack, tier: Tier) => TIER_RANK[tier] >= TIER_RANK[p.minTier];
 
-/** One small real file (Silero VAD, 2.3 MB, MIT) to try the downloader before the CDN exists. */
+/**
+ * Until the CDN exists: one real voice (Cori) and one small test file (Silero VAD, 2.3 MB, MIT)
+ * for the Engine lab's download test.
+ */
 export const DEV_CATALOGUE: Catalogue = {
   version: 1,
   packs: [
+    // A real voice pack until the CDN exists. Files are pinned to one Hugging Face commit so they cannot change.
+    {
+      id: 'cori-medium',
+      kind: 'voice',
+      name: 'Cori',
+      tags: ['Natural', 'Female', 'English UK'],
+      minTier: 'lite',
+      licence: 'Cori: LibriVox recordings, public domain; Piper voice by Bryce Beattie',
+      files: [
+        {
+          path: 'model.onnx',
+          url: 'https://huggingface.co/csukuangfj/vits-piper-en_GB-cori-medium/resolve/e304c95c578725ba9cab0cff451c4e5d9aaf889e/en_GB-cori-medium.onnx',
+          sha256: '8b0d3cdd77f2878e0aa2048103eabb4d01b334783f99629f042bcf703aeba487',
+          bytes: 63531507,
+        },
+        {
+          path: 'tokens.txt',
+          url: 'https://huggingface.co/csukuangfj/vits-piper-en_GB-cori-medium/resolve/e304c95c578725ba9cab0cff451c4e5d9aaf889e/tokens.txt',
+          sha256: 'ef3a7e4a8d1af0c9d4dc45aaae1a6242ebe24a7ed6f3d025a49eb29682784c6d',
+          bytes: 940,
+        },
+      ],
+    },
     {
       id: 'download-test',
       kind: 'test',

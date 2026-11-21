@@ -90,9 +90,19 @@ export type NativePackEvent =
 export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
 
 type VoxaEngineNative = {
-  loadVoice(): Promise<{ sampleRate: number; numSpeakers: number; loadMs: number }>;
+  /** voice: "" for the built-in voice or a voice pack id. Does not replace a voice already loaded. */
+  loadVoice(voice: string): Promise<{ sampleRate: number; numSpeakers: number; loadMs: number }>;
   /** overrides win over the English lexicon; fallbacks fill words it lacks. Values are space-separated phones. */
-  speak(id: number, text: string, sid: number, speed: number, overrides: Record<string, string>, fallbacks: Record<string, string>): void;
+  speak(
+    id: number,
+    text: string,
+    sid: number,
+    speed: number,
+    overrides: Record<string, string>,
+    fallbacks: Record<string, string>,
+    /** "" for the built-in voice, or an installed voice pack's id. */
+    voice: string,
+  ): void;
   stopSpeaking(): void;
   requestMicPermission(): Promise<{ granted: boolean; status: string; canAskAgain?: boolean }>;
   startListening(): Promise<{ loadMs: number }>;
