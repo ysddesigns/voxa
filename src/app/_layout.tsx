@@ -31,6 +31,7 @@ function Root() {
         <Stack.Screen name="engine-lab" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="phrases" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen
           name="voice-picker"

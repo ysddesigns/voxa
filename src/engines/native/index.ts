@@ -9,7 +9,7 @@ import { nativeLabelSpeakers, startNativeListen } from './listen';
 
 /**
  * On-device engines backed by modules/voxa-engine (sherpa-onnx). Android only for now:
- * voice = Piper LJSpeech medium (chosen in Phase 0), speech = streaming Zipformer 20M. Scan and summary still use the mocks.
+ * voice = Piper LJSpeech medium (chosen in Phase 0), speech = streaming Zipformer 20M. scan = ML Kit Latin (bundled), summary = quick summary in TypeScript.
  */
 
 const VOICE_PREFIX = 'device-';
@@ -149,7 +149,15 @@ export function getNativeEngines(): Engines | null {
         : {}),
     },
 
-    scan: mock.scan,
+    // Builds from before ML Kit use the mock scanner.
+    scan: native.recognizeText
+      ? {
+          async recognize(uri: string) {
+            const lines = await native.recognizeText!(uri);
+            return lines.map((l) => ({ text: l.text, confidence: l.confidence, unsureWords: l.unsureWords, paragraph: l.block }));
+          },
+        }
+      : mock.scan,
     summary: mock.summary,
   };
   return cached;

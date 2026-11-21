@@ -9,6 +9,7 @@ import { type } from '@/design/type';
 import { formatClock, formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
 import { speakerName } from '@/features/listen/speakers';
+import { useSpeakSession } from '@/features/speak/speak-session';
 import { sessionStore } from '@/storage';
 import type { Session } from '@/storage/sessions';
 import type { TranscriptSegment } from '@/engines/types';
@@ -20,6 +21,7 @@ export default function SessionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const l = useListen();
+  const speak = useSpeakSession();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [title, setTitle] = useState('');
 
@@ -70,7 +72,10 @@ export default function SessionScreen() {
   };
 
   const share = () => {
-    const text = [session.title, `${formatDay(session.startedAt)} · ${formatDuration(session.durationMs)}`, '', transcriptText(session.segments)].join('\n');
+    const text =
+      session.kind === 'scan'
+        ? [session.title, '', session.text ?? ''].join('\n')
+        : [session.title, `${formatDay(session.startedAt)} · ${formatDuration(session.durationMs)}`, '', transcriptText(session.segments)].join('\n');
     void Share.share({ title: session.title, message: text });
   };
 
@@ -111,11 +116,32 @@ export default function SessionScreen() {
             style={[type.title, { color: colors.text, padding: 0 }]}
           />
           <Text style={[type.callout, { color: colors.textTertiary }]}>
-            {formatDay(session.startedAt)} · {formatDuration(session.durationMs)}
+            {session.kind === 'scan'
+              ? `Scanned · ${formatDay(session.startedAt)} · ${wordCount(session.text ?? '')} words`
+              : `${formatDay(session.startedAt)} · ${formatDuration(session.durationMs)}`}
             {session.speakers ? ` · ${session.speakers} ${session.speakers === 1 ? 'speaker' : 'speakers'}` : ''}
             {session.status === 'recovered' ? ' · recovered' : ''}
           </Text>
         </View>
+
+        {session.kind === 'scan' ? (
+          <>
+            <Pressable
+              onPress={() => {
+                speak.setText(session.text ?? '');
+                router.push('/editor');
+              }}
+              accessibilityRole="button"
+              style={[styles.pill, styles.row, { backgroundColor: colors.accent }]}
+            >
+              <Icon name="play" size={18} color={colors.onAccent} />
+              <Text style={[type.bodyStrong, { color: colors.onAccent }]}>Speak it</Text>
+            </Pressable>
+            <Text style={[type.body, { color: colors.text }]} selectable>
+              {session.text}
+            </Text>
+          </>
+        ) : null}
 
         {session.hasAudio || labelling ? (
           <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -213,8 +239,8 @@ export default function SessionScreen() {
           </View>
         ) : null}
 
-        <Text style={[type.heading, { color: colors.text }]}>Transcript</Text>
-        {session.segments.length === 0 ? (
+        {session.kind === 'scan' ? null : <Text style={[type.heading, { color: colors.text }]}>Transcript</Text>}
+        {session.kind === 'scan' ? null : session.segments.length === 0 ? (
           <Text style={[type.body, { color: colors.textTertiary }]}>No words were saved.</Text>
         ) : (
           groupBySpeaker(session.segments).map((g) => (
@@ -246,6 +272,10 @@ function groupBySpeaker(segments: TranscriptSegment[]) {
     }
   }
   return groups;
+}
+
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
 function transcriptText(segments: TranscriptSegment[]): string {

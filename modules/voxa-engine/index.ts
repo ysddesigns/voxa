@@ -87,6 +87,8 @@ export type NativePackEvent =
   | { id: string; type: 'installed' | 'cancelled' }
   | { id: string; type: 'error'; message: string };
 
+export type NativeScanLine = { text: string; confidence: number; unsureWords: string[]; top: number; left: number; block: number };
+
 export type NativeSpeakerTurn = { startMs: number; endMs: number; speaker: number };
 
 export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
@@ -120,6 +122,8 @@ type VoxaEngineNative = {
   labelSpeakers?(audioPath: string): Promise<NativeSpeakerTurn[]>;
   cancelLabel?(): void;
   benchmark(): Promise<BenchmarkResult>;
+  /** Scan text (ML Kit, offline). Builds from 22 Nov 2026. */
+  recognizeText?(uri: string): Promise<NativeScanLine[]>;
   /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */
   startLongTest?(minutes: number): Promise<void>;
   stopLongTest?(): void;

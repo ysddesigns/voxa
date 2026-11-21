@@ -15,7 +15,8 @@ export type SessionStatus = 'recording' | 'saved' | 'recovered';
 
 export type SessionMeta = {
   id: string;
-  kind: 'listen';
+  /** listen: a meeting transcript; scan: text read from a photo (kept in `text`). */
+  kind: 'listen' | 'scan';
   title: string;
   /** Epoch ms. */
   startedAt: number;
@@ -27,6 +28,8 @@ export type SessionMeta = {
   speakers?: number;
   /** The audio is still on the phone, waiting for speaker labels. */
   hasAudio?: boolean;
+  /** Scans: the text, as checked and edited by the person. */
+  text?: string;
   summary?: Summary;
 };
 
@@ -90,6 +93,11 @@ export class SessionStore {
     const full: SessionMeta = { status: 'recording', marks: [], durationMs: 0, ...meta };
     await this.files.write(metaPath(full.id), JSON.stringify(full));
     return full;
+  }
+
+  /** Saves scanned text as a finished Library item. */
+  async saveScan(text: string, title: string, at = Date.now()): Promise<SessionMeta> {
+    return this.create({ id: newSessionId(at), kind: 'scan', title, startedAt: at, status: 'saved', text });
   }
 
   async appendSegment(id: string, segment: TranscriptSegment): Promise<void> {

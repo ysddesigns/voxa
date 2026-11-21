@@ -112,6 +112,7 @@ class VoxaEngineModule : Module() {
   @Volatile private var privateOutput = false
   @Volatile private var longTestRunning = false
   private val packs by lazy { PackStore(context) }
+  private val scanner by lazy { TextScanner(context) }
   /** Pack id → cancel requested, for installs in progress. */
   private val packCancels = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
   private var listenThread: Thread? = null
@@ -325,6 +326,18 @@ class VoxaEngineModule : Module() {
       mapOf("connected" to connected, "unmetered" to unmetered)
     }
 
+    // Scan text from an image (file:// or content:// uri). Lines top to bottom.
+    AsyncFunction("recognizeText") { uri: String, promise: Promise ->
+      thread(name = "voxa-scan") {
+        try {
+          promise.resolve(scanner.recognize(uri))
+        } catch (e: Throwable) {
+          Log.e(TAG, "scan failed", e)
+          promise.reject("E_SCAN", e.message ?: "Could not read the text", e)
+        }
+      }
+    }
+
     Function("release") {
       speakGen.incrementAndGet()
       listening = false
@@ -336,6 +349,7 @@ class VoxaEngineModule : Module() {
       speakGen.incrementAndGet()
       listening = false
       releaseModels()
+      scanner.release()
     }
   }
 

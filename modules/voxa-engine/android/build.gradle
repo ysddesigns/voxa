@@ -22,4 +22,7 @@ dependencies {
     throw new GradleException("modules/voxa-engine is missing sherpa-onnx. Run .\\scripts\\fetch-engine.ps1 first.")
   }
   implementation files(classes)
+  // Scan text: Latin-script recognizer with the model bundled in the app (about 4 MB), so it
+  // works offline from the first run. The unbundled variant downloads its model via Play Services.
+  implementation 'com.google.mlkit:text-recognition:16.0.1'
 }

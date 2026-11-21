@@ -80,9 +80,15 @@ export default function Home() {
         </View>
         <View style={styles.heroRow}>
           {(['Paste', 'Scan', 'Files'] as const).map((label) => (
-            <View key={label} style={[styles.heroChip, { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
+            <Pressable
+              key={label}
+              accessibilityRole="button"
+              accessibilityLabel={label === 'Scan' ? 'Scan text with the camera' : label}
+              onPress={() => router.push(label === 'Scan' ? '/scan' : '/editor')}
+              style={[styles.heroChip, { backgroundColor: 'rgba(255,255,255,0.22)' }]}
+            >
               <Text style={[type.callout, { color: colors.onAccent }]}>{label}</Text>
-            </View>
+            </Pressable>
           ))}
           <View style={{ flex: 1 }} />
           <View style={[styles.plus, { backgroundColor: '#111111' }]}>
@@ -120,12 +126,14 @@ export default function Home() {
             ]}
           >
             <View style={[styles.rowIcon, { backgroundColor: colors.warning }]}>
-              <Icon name="live" size={18} color={colors.accentText} />
+              <Icon name={item.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
               <Text style={[type.caption, { color: colors.textTertiary }]}>
-                {`${formatDay(item.startedAt)} · ${formatDuration(item.durationMs)}${item.speakers ? ` · ${item.speakers} speakers` : ''}`}
+                {item.kind === 'scan'
+                  ? `Scanned · ${formatDay(item.startedAt)}`
+                  : `${formatDay(item.startedAt)} · ${formatDuration(item.durationMs)}${item.speakers ? ` · ${item.speakers} speakers` : ''}`}
               </Text>
             </View>
           </Pressable>

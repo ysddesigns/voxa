@@ -90,7 +90,13 @@ export interface SpeechEngine {
   labelSpeakers?(audioPath: string, onProgress?: (fraction: number) => void): { cancel(): void; done: Promise<SpeakerTurn[]> };
 }
 
-export type ScanLine = { text: string; confidence: number; unsureWords: string[] };
+export type ScanLine = {
+  text: string;
+  confidence: number;
+  unsureWords: string[];
+  /** Lines with the same number belong to one paragraph (text block). */
+  paragraph?: number;
+};
 
 export interface ScanEngine {
   recognize(imageUri: string): Promise<ScanLine[]>;

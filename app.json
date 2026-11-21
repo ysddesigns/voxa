@@ -42,6 +42,13 @@
       "expo-router",
       "expo-font",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Voxa reads printed text with the camera. Photos stay on this phone.",
+          "photosPermission": "Voxa reads text from photos you pick. Photos stay on this phone."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#FBF4F0",

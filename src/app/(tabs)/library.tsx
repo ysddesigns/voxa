@@ -63,7 +63,7 @@ export default function LibraryScreen() {
         <View style={[styles.empty, { backgroundColor: colors.card }]}>
           <Text style={[type.bodyStrong, { color: colors.text }]}>{query ? 'Nothing matches' : 'Nothing saved yet'}</Text>
           <Text style={[type.body, { color: colors.textSecondary }]}>
-            {query ? 'Try another word.' : 'Meetings you listen to are saved here, on this phone only.'}
+            {query ? 'Try another word.' : 'Meetings you listen to and text you scan are saved here, on this phone only.'}
           </Text>
           {query ? null : (
             <Pressable onPress={() => router.navigate('/live')} accessibilityRole="button" style={[styles.pill, { backgroundColor: colors.primaryFill }]}>
@@ -85,7 +85,7 @@ export default function LibraryScreen() {
               ]}
             >
               <View style={[styles.rowIcon, { backgroundColor: colors.warning }]}>
-                <Icon name="live" size={18} color={colors.accentText} />
+                <Icon name={s.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={1}>
@@ -102,6 +102,7 @@ export default function LibraryScreen() {
 }
 
 function metaLine(s: SessionMeta): string {
+  if (s.kind === 'scan') return `Scanned · ${formatDay(s.startedAt)}`;
   const parts = [formatDay(s.startedAt), formatDuration(s.durationMs)];
   if (s.speakers) parts.push(`${s.speakers} ${s.speakers === 1 ? 'speaker' : 'speakers'}`);
   if (s.marks.length) parts.push(`${s.marks.length} ${s.marks.length === 1 ? 'mark' : 'marks'}`);
