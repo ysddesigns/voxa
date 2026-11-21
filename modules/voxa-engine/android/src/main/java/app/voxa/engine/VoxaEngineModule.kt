@@ -101,6 +101,9 @@ class VoxaEngineModule : Module() {
 
   @Volatile private var listening = false
   @Volatile private var longTestRunning = false
+  private val packs by lazy { PackStore(context) }
+  /** Pack id → cancel requested, for installs in progress. */
+  private val packCancels = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
   private var listenThread: Thread? = null
 
   private class Sentence(val start: Int, val end: Int, val text: String)
@@ -109,7 +112,7 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest")
+    Events("onSpeak", "onListen", "onLongTest", "onPack")
 
     AsyncFunction("loadVoice") { promise: Promise ->
       thread(name = "voxa-tts-load") {
@@ -198,6 +201,40 @@ class VoxaEngineModule : Module() {
     Function("longTestReport") {
       val f = File(context.filesDir, LONG_TEST_FILE)
       if (f.exists()) f.readLines().filter { it.isNotBlank() } else emptyList()
+    }
+
+    // --- Packs: downloaded voices and models (see PackStore) ---
+
+    // Downloads, checks and installs a pack; progress and the result arrive as onPack events.
+    // manifest is the catalogue entry as JSON, saved with the pack.
+    Function("installPack") { id: String, manifest: String, files: List<Map<String, Any>> ->
+      val parsed = PackStore.parseFiles(files)
+      PackStore.checkId(id)
+      if (packCancels.putIfAbsent(id, false) == null) {
+        thread(name = "voxa-pack-$id") { runInstall(id, manifest, parsed) }
+      }
+      Unit
+    }
+
+    Function("cancelPack") { id: String ->
+      packCancels.replace(id, true)
+      Unit
+    }
+
+    Function("installedPacks") { packs.installed() }
+
+    Function("packManifest") { id: String -> packs.manifest(id) }
+
+    Function("deletePack") { id: String ->
+      packs.delete(id)
+      Unit
+    }
+
+    Function("storageInfo") { mapOf("freeBytes" to packs.freeBytes().toDouble()) }
+
+    Function("networkInfo") {
+      val (connected, unmetered) = packs.network()
+      mapOf("connected" to connected, "unmetered" to unmetered)
     }
 
     Function("release") {
@@ -543,6 +580,29 @@ class VoxaEngineModule : Module() {
       "segment",
       mapOf("index" to index, "text" to text, "startMs" to startMs.toDouble(), "endMs" to endMs.toDouble(), "final" to final),
     )
+  }
+
+  // --- Packs ---------------------------------------------------------------------------
+
+  private fun runInstall(id: String, manifest: String, files: List<PackStore.PackFile>) {
+    var lastEmit = 0L
+    try {
+      packs.install(id, manifest, files, cancelled = { packCancels[id] == true }) { done, total ->
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastEmit >= 250 || done == total) {
+          lastEmit = now
+          sendEvent("onPack", mapOf("id" to id, "type" to "progress", "done" to done.toDouble(), "total" to total.toDouble()))
+        }
+      }
+      sendEvent("onPack", mapOf("id" to id, "type" to "installed"))
+    } catch (e: PackStore.Cancelled) {
+      sendEvent("onPack", mapOf("id" to id, "type" to "cancelled"))
+    } catch (e: Throwable) {
+      Log.e(TAG, "pack $id failed", e)
+      sendEvent("onPack", mapOf("id" to id, "type" to "error", "message" to (e.message ?: "Download failed")))
+    } finally {
+      packCancels.remove(id)
+    }
   }
 
   // --- Long screen-off test ------------------------------------------------------------

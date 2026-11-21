@@ -81,6 +81,14 @@ export type LongTestSample = {
   reason?: string;
 };
 
+/** Progress and results of pack installs (see PackStore.kt). */
+export type NativePackEvent =
+  | { id: string; type: 'progress'; done: number; total: number }
+  | { id: string; type: 'installed' | 'cancelled' }
+  | { id: string; type: 'error'; message: string };
+
+export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
+
 type VoxaEngineNative = {
   loadVoice(): Promise<{ sampleRate: number; numSpeakers: number; loadMs: number }>;
   /** overrides win over the English lexicon; fallbacks fill words it lacks. Values are space-separated phones. */
@@ -96,7 +104,16 @@ type VoxaEngineNative = {
   longTestRunning?(): boolean;
   /** JSON lines, each a LongTestSample. */
   longTestReport?(): string[];
+  /** Packs: missing in builds made before 21 Nov 2026. */
+  installPack?(id: string, manifest: string, files: NativePackFile[]): void;
+  cancelPack?(id: string): void;
+  installedPacks?(): string[];
+  packManifest?(id: string): string | null;
+  deletePack?(id: string): void;
+  storageInfo?(): { freeBytes: number };
+  networkInfo?(): { connected: boolean; unmetered: boolean };
   release(): void;
+  addListener(event: 'onPack', listener: (e: NativePackEvent) => void): EventSubscription;
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): EventSubscription;
   addListener(event: 'onLongTest', listener: (e: LongTestSample) => void): EventSubscription;

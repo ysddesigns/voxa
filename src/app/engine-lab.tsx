@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { nativeBenchmark } from '@/engines/native';
 import { parseLongTest, summarizeLongTest, type LongTestSummary } from '@/engines/native/long-test';
+import { DEV_CATALOGUE } from '@/features/packs/catalogue';
+import { PackService, type InstallHandle, type PackNative } from '@/features/packs/pack-service';
+import { formatMB, verdictMessage } from '@/features/packs/rules';
 import { useEngineMode, useEngines } from '@/engines/provider';
 import type { ListenSession, SpeakHandle, TranscriptSegment } from '@/engines/types';
 import { useTheme } from '@/design/theme';
@@ -16,6 +19,9 @@ import { VoxaEngine, type BenchmarkResult } from '../../modules/voxa-engine';
  */
 
 const LONG_TEST_MINUTES = 60;
+
+const packService = VoxaEngine?.installPack ? new PackService(VoxaEngine as unknown as PackNative) : null;
+const TEST_PACK = DEV_CATALOGUE.packs[0];
 
 function longTestRows(s: LongTestSummary): Row[] {
   const n = (x: number, d = 0) => x.toFixed(d);
@@ -168,6 +174,62 @@ export default function EngineLab() {
     } catch (e) {
       setLongError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  // Downloads: one small real file, to try resume, checksum and install on the phone.
+  const [packStatus, setPackStatus] = useState<{ installed: boolean; free: string; network: string } | null>(null);
+  const [packProgress, setPackProgress] = useState<number | null>(null);
+  const [packMessage, setPackMessage] = useState<string | null>(null);
+  const packHandle = useRef<InstallHandle | null>(null);
+
+  const refreshPack = () => {
+    if (!packService || !VoxaEngine?.storageInfo || !VoxaEngine.networkInfo) return;
+    const net = VoxaEngine.networkInfo();
+    setPackStatus({
+      installed: packService.installed().has(TEST_PACK.id),
+      free: formatMB(VoxaEngine.storageInfo().freeBytes),
+      network: !net.connected ? 'offline' : net.unmetered ? 'Wi-Fi' : 'mobile data',
+    });
+  };
+
+  useEffect(() => {
+    const first = setTimeout(refreshPack, 0);
+    return () => {
+      clearTimeout(first);
+      packHandle.current?.cancel();
+    };
+  }, []);
+
+  const togglePack = () => {
+    if (!packService) return;
+    setPackMessage(null);
+    if (packHandle.current) {
+      packHandle.current.cancel();
+      return;
+    }
+    if (packStatus?.installed) {
+      packService.remove(TEST_PACK.id);
+      refreshPack();
+      return;
+    }
+    const verdict = packService.check(TEST_PACK, false);
+    if (!verdict.ok) {
+      setPackMessage(verdictMessage(verdict));
+      return;
+    }
+    setPackProgress(0);
+    const h = packService.install(TEST_PACK, setPackProgress);
+    packHandle.current = h;
+    h.done
+      .then(
+        () => setPackMessage('Installed and checked (SHA-256 matches).'),
+        (e: Error) => setPackMessage(e.message),
+      )
+      .finally(() => {
+        packHandle.current = null;
+        setPackProgress(null);
+        refreshPack();
+      });
   };
 
   const chosen = voiceId && installed.some((v) => v.id === voiceId) ? voiceId : defaultId;
@@ -330,6 +392,27 @@ export default function EngineLab() {
               </Text>
             </View>
           ))}
+      </View>
+
+      {/* Downloads */}
+      <Text style={[type.overline, { color: colors.textSecondary }]}>Downloads</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={[type.caption, { color: colors.textTertiary }]}>
+          Tries the pack downloader with one small real file ({TEST_PACK.licence}, {formatMB(TEST_PACK.files[0].bytes)}).
+          Cancel halfway and start again: it should carry on from where it stopped.
+        </Text>
+        {packStatus && (
+          <Text style={[type.caption, { color: colors.textSecondary }]}>
+            {packStatus.installed ? 'Installed' : 'Not installed'} · {packStatus.free} free · {packStatus.network}
+          </Text>
+        )}
+        <Button
+          label={packProgress !== null ? `Cancel (${Math.round(packProgress * 100)}%)` : packStatus?.installed ? 'Remove test pack' : 'Download test pack'}
+          onPress={togglePack}
+          disabled={!packService}
+        />
+        {!packService && <Text style={[type.caption, { color: colors.warning }]}>This build has no downloader. Rebuild Android.</Text>}
+        {packMessage && <Text style={[type.caption, { color: colors.textSecondary }]}>{packMessage}</Text>}
       </View>
 
       {/* Speak */}
