@@ -46,7 +46,7 @@ export default function Player() {
 
       <View style={styles.body}>
         <View style={{ gap: 3 }}>
-          <Text numberOfLines={1} style={[type.title, { color: colors.text }]}>{s.title}</Text>
+          <Text numberOfLines={2} style={[type.title, { color: colors.text }]}>{s.title}</Text>
           <Text style={[type.callout, { color: colors.textTertiary, fontFamily: type.body.fontFamily }]}>
             {voice ? `${voice.name} · ${voiceSubtitle(voice)}` : 'No voice'}
           </Text>
@@ -75,7 +75,7 @@ export default function Player() {
             accessibilityLabel={`Speed ${formatSpeed(s.rate)}. Change speed`}
             style={[styles.pill, { backgroundColor: colors.card }]}
           >
-            <Text style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
           </Pressable>
           <RoundButton icon="back15" label="Back 15 seconds" onPress={() => s.skip(-15)} />
           <Pressable

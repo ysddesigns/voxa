@@ -88,7 +88,7 @@ export default function LibraryScreen() {
                 <Icon name={s.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={1}>
+                <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={2}>
                   {s.title}
                 </Text>
                 <Text style={[type.caption, { color: colors.textTertiary }]}>{metaLine(s)}</Text>
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.pill, paddingHorizontal: 14 },
   live: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.card, padding: 14 },
   empty: { borderRadius: radius.card, padding: 20, gap: 8 },
-  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch - 4, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
+  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
   list: { borderRadius: radius.card, paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, minHeight: minTouch },
   rowIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

@@ -95,6 +95,15 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        <Section title="Listening">
+          <Toggle
+            label="Read captions with the screen reader"
+            hint="When TalkBack or VoiceOver is on, each new sentence on the Live screen is read out. Useful with a braille display."
+            value={prefs.readCaptions}
+            onChange={(v) => update({ readCaptions: v })}
+          />
+        </Section>
+
         <Section title="Downloads">
           <ModelRow id="listen" title="Listening" what="Live captions in English" />
           <ModelRow id="speakers" title="Speaker labels" what="Who spoke when, after a meeting" />
@@ -227,5 +236,5 @@ const styles = StyleSheet.create({
   card: { borderRadius: radius.card, paddingHorizontal: 16, paddingVertical: 8, gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch },
   segment: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
-  segmentItem: { flex: 1, borderRadius: radius.pill, minHeight: minTouch - 4, alignItems: 'center', justifyContent: 'center' },
+  segmentItem: { flex: 1, borderRadius: radius.pill, minHeight: minTouch, alignItems: 'center', justifyContent: 'center' },
 });

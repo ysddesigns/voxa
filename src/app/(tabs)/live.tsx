@@ -5,11 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
 import { Screen } from '@/components/screen';
+import { announce, useScreenReader } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { useListen } from '@/features/listen/listen-session';
 import { useModels } from '@/features/packs/models';
+import { usePrefs } from '@/features/settings/prefs';
 import { formatClock } from '@/features/listen/format';
 import type { TranscriptSegment } from '@/engines/types';
 import type { Mark } from '@/storage/sessions';
@@ -18,6 +20,10 @@ import type { Mark } from '@/storage/sessions';
 export default function LiveScreen() {
   const l = useListen();
   const active = l.status !== 'idle';
+  // Errors appear as text; screen-reader users hear them too.
+  useEffect(() => {
+    if (l.error) announce(l.error);
+  }, [l.error]);
   return active ? <Listening /> : <Ready />;
 }
 
@@ -116,6 +122,24 @@ function Listening() {
   const list = useRef<FlatList<Row>>(null);
   const [, tick] = useState(0);
   const [follow, setFollow] = useState(true);
+  const screenReader = useScreenReader();
+  const { prefs } = usePrefs();
+
+  // Tell screen-reader users what changed: the controls' look alone does not.
+  useEffect(() => {
+    if (l.status === 'listening') announce('Listening');
+    else if (l.status === 'paused') announce('Paused. The microphone is off.');
+    else if (l.status === 'stopping') announce('Saving');
+  }, [l.status]);
+  const markCount = l.marks.length;
+  useEffect(() => {
+    if (markCount > 0) announce(`Mark ${markCount} added`);
+  }, [markCount]);
+  // New sentences are read out only when the person asked for it in Settings.
+  const lastSentence = l.segments[l.segments.length - 1];
+  useEffect(() => {
+    if (screenReader && prefs.readCaptions && lastSentence) announce(lastSentence.text);
+  }, [screenReader, prefs.readCaptions, lastSentence]);
 
   // The clock reads the engine's listened time twice a second.
   useEffect(() => {
@@ -129,6 +153,7 @@ function Listening() {
 
   const stop = async () => {
     const id = await l.stop();
+    if (id) announce('Meeting saved');
     if (id) router.push({ pathname: '/session/[id]', params: { id } });
   };
 
@@ -139,7 +164,7 @@ function Listening() {
           <Text style={[type.overline, { color: paused ? colors.textTertiary : colors.accentText }]}>
             {l.status === 'starting' ? 'Starting…' : l.status === 'stopping' ? 'Saving…' : paused ? 'Paused' : 'Listening'}
           </Text>
-          <Text style={[type.title, { color: colors.text }]} accessibilityRole="header" numberOfLines={1}>
+          <Text style={[type.title, { color: colors.text }]} accessibilityRole="header" numberOfLines={2}>
             {l.title}
           </Text>
         </View>
@@ -156,6 +181,7 @@ function Listening() {
       <FlatList
         ref={list}
         style={{ flex: 1 }}
+        accessibilityLabel="Captions"
         contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 10 }}
         data={data}
         keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}

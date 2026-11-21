@@ -214,10 +214,10 @@ const sep = (color: string) => ({ borderTopWidth: StyleSheet.hairlineWidth, bord
 
 const styles = StyleSheet.create({
   storage: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.pill, marginBottom: 6 },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 12, borderRadius: 12 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 12 },
   searchInput: { flex: 1, paddingVertical: 0 },
   filters: { gap: 8 },
-  filter: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
+  filter: { minHeight: 44, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
   card: { borderRadius: radius.card, padding: 14, gap: 10 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bigPlay: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },

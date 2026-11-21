@@ -84,8 +84,8 @@ export default function Editor() {
             accessibilityLabel={`Speed ${formatSpeed(s.rate)}. Change speed`}
             style={[styles.speed, { backgroundColor: colors.card }]}
           >
-            <Text style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
-            <Text style={[type.caption, { color: colors.textTertiary, fontSize: 11 }]}>Speed</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.caption, { color: colors.textTertiary, fontSize: 11 }]}>Speed</Text>
           </Pressable>
         </View>
 
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    height: 92,
+    minHeight: 92,
     borderRadius: 28,
     flexDirection: 'row',
     alignItems: 'center',

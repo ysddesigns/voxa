@@ -134,7 +134,7 @@ export default function Home() {
               <Icon name={item.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
               <Text style={[type.caption, { color: colors.textTertiary }]}>
                 {item.kind === 'scan'
                   ? `Scanned · ${formatDay(item.startedAt)}`
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   hero: { borderRadius: radius.hero, padding: 22, gap: 16 },
   heroWave: { height: 60, justifyContent: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  heroChip: { borderRadius: radius.chip, paddingHorizontal: 14, minHeight: minTouch - 8, justifyContent: 'center' },
+  heroChip: { borderRadius: radius.chip, paddingHorizontal: 14, minHeight: minTouch, justifyContent: 'center' },
   plus: { width: minTouch + 4, height: minTouch + 4, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   tiles: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1, borderRadius: radius.tile, padding: 16, gap: 6 },

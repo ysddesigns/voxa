@@ -1,5 +1,6 @@
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/icons';
+import { progressProps } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -52,7 +53,7 @@ export function ModelRow({ id, title, what }: { id: ModelId; title: string; what
         )}
       </View>
       {dl ? (
-        <View style={[styles.track, { backgroundColor: colors.chip }]}>
+        <View {...progressProps(`Downloading ${title}`, dl.fraction)} style={[styles.track, { backgroundColor: colors.chip }]}>
           <View style={{ width: `${Math.max(2, dl.fraction * 100)}%`, height: '100%', backgroundColor: colors.accent }} />
         </View>
       ) : null}
@@ -63,6 +64,6 @@ export function ModelRow({ id, title, what }: { id: ModelId; title: string; what
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch },
-  small: { borderRadius: radius.pill, paddingHorizontal: 14, minHeight: minTouch - 8, justifyContent: 'center' },
+  small: { borderRadius: radius.pill, paddingHorizontal: 14, minHeight: minTouch, justifyContent: 'center' },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
 });

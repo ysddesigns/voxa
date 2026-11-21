@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
+import { progressProps } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -55,7 +56,7 @@ export default function SessionScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background, padding: 24 }]}>
         <Text style={[type.body, { color: colors.textSecondary, textAlign: 'center' }]}>This session is no longer on the phone.</Text>
-        <Pressable onPress={() => router.back()} style={[styles.pill, { backgroundColor: colors.chip, marginTop: 16 }]}>
+        <Pressable onPress={() => router.back()} accessibilityRole="button" style={[styles.pill, { backgroundColor: colors.chip, marginTop: 16 }]}>
           <Text style={[type.bodyStrong, { color: colors.text }]}>Go back</Text>
         </Pressable>
       </View>
@@ -157,7 +158,7 @@ export default function SessionScreen() {
             </View>
             {working ? (
               <>
-                <View style={[styles.track, { backgroundColor: colors.chip }]}>
+                <View {...progressProps('Finding who spoke', labelling.fraction)} style={[styles.track, { backgroundColor: colors.chip }]}>
                   <View style={{ width: `${Math.max(2, labelling.fraction * 100)}%`, height: '100%', borderRadius: 3, backgroundColor: colors.accent }} />
                 </View>
                 <Text style={[type.caption, { color: colors.textTertiary }]}>Takes about half the meeting&apos;s length. You can leave this screen.</Text>
@@ -198,11 +199,15 @@ export default function SessionScreen() {
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.row}>
               <Icon name="sparkle" size={20} color={colors.accentText} />
-              <Text style={[type.bodyStrong, { color: colors.text }]}>Quick summary</Text>
+              <Text style={[type.bodyStrong, { color: colors.text }]} accessibilityRole="header">
+                Quick summary
+              </Text>
             </View>
             {session.summary.keyPoints.map((p, i) => (
               <View key={`k${i}`} style={styles.row}>
-                <Text style={[type.body, { color: colors.textTertiary }]}>•</Text>
+                <Text style={[type.body, { color: colors.textTertiary }]} importantForAccessibility="no" accessibilityElementsHidden>
+                  •
+                </Text>
                 <Text style={[type.body, { color: colors.text, flex: 1 }]}>
                   {p.text}
                   {p.atMs !== null ? <Text style={{ color: colors.textTertiary }}>  {formatClock(p.atMs)}</Text> : null}
@@ -231,7 +236,9 @@ export default function SessionScreen() {
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.row}>
               <Icon name="flag" size={20} color={colors.accentText} />
-              <Text style={[type.bodyStrong, { color: colors.text }]}>Marks</Text>
+              <Text style={[type.bodyStrong, { color: colors.text }]} accessibilityRole="header">
+                Marks
+              </Text>
             </View>
             {session.marks.map((m, i) => {
               const near = session.segments.find((s) => s.endMs >= m.atMs);
@@ -247,7 +254,9 @@ export default function SessionScreen() {
           </View>
         ) : null}
 
-        {session.kind === 'scan' ? null : <Text style={[type.heading, { color: colors.text }]}>Transcript</Text>}
+        {session.kind === 'scan' ? null : <Text style={[type.heading, { color: colors.text }]} accessibilityRole="header">
+            Transcript
+          </Text>}
         {session.kind === 'scan' ? null : session.segments.length === 0 ? (
           <Text style={[type.body, { color: colors.textTertiary }]}>No words were saved.</Text>
         ) : (
@@ -307,6 +316,6 @@ const styles = StyleSheet.create({
   iconBtn: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: radius.card, padding: 16, gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch - 4, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
 });

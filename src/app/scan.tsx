@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
+import { announce } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -48,10 +49,13 @@ export default function ScanScreen() {
       if (!found) {
         setStep({ kind: 'pick' });
         setError('No text found. Try again with more light, the page flat, and the text filling the photo.');
+        announce('No text found');
         return;
       }
       setText(found);
-      setStep({ kind: 'done', uri, unsure: unsureWords(lines) });
+      const unsure = unsureWords(lines);
+      setStep({ kind: 'done', uri, unsure });
+      announce(`Text found.${unsure.length ? ` ${unsure.length} ${unsure.length === 1 ? 'word' : 'words'} to check.` : ''}`);
     } catch (err) {
       setStep({ kind: 'pick' });
       setError(err instanceof Error ? `Could not read the photo: ${err.message}` : 'Could not read the photo.');
@@ -192,7 +196,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: radius.card, padding: 16, gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   big: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: minTouch + 8, borderRadius: radius.pill },
-  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch - 4, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   thumb: { width: 56, height: 56, borderRadius: 10 },
   thumbBig: { width: '100%', height: 220, borderRadius: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

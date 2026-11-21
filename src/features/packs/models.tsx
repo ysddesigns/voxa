@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { VoxaEngine } from '../../../modules/voxa-engine';
+import { announce } from '@/design/a11y';
 import { useEngineMode } from '@/engines/provider';
 import { usePrefs } from '@/features/settings/prefs';
 import { LISTEN_PACK, packBytes, SPEAKERS_PACK, type Pack } from './catalogue';
@@ -75,10 +76,15 @@ export function ModelsProvider({ children }: { children: ReactNode }) {
       const handle = packService.install(p, (fraction) => setDownloads((d) => (d[id] ? { ...d, [id]: { ...d[id]!, fraction } } : d)));
       setDownloads((d) => ({ ...d, [id]: { fraction: 0, cancel: handle.cancel } }));
       handle.done
-        .then(refresh)
+        .then(() => {
+          refresh();
+          announce(`${p.name} downloaded`);
+        })
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : 'Download failed';
-          if (!/cancel/i.test(message)) setErrors((e) => ({ ...e, [id]: `Download failed: ${message}` }));
+          if (/cancel/i.test(message)) return;
+          setErrors((e) => ({ ...e, [id]: `Download failed: ${message}` }));
+          announce(`Download failed: ${message}`);
         })
         .finally(() => {
           active.current.delete(id);

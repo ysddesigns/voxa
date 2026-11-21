@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   head: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
   speak: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.pill, paddingHorizontal: 18, minHeight: minTouch },
-  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch - 4, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   list: { borderRadius: radius.card, paddingHorizontal: 16, overflow: 'hidden' },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: minTouch + 8, paddingVertical: 10 },
-  small: { width: minTouch - 4, height: minTouch - 4, alignItems: 'center', justifyContent: 'center' },
+  small: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
 });

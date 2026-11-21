@@ -14,9 +14,11 @@ export type Prefs = {
   allowMobileData: boolean;
   /** Finished (or skipped) the first-run setup. */
   onboarded: boolean;
+  /** With TalkBack or VoiceOver on, read each new caption sentence aloud on the Live screen. */
+  readCaptions: boolean;
 };
 
-export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false };
+export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false, readCaptions: false };
 
 const PATH = 'prefs.json';
 const THEMES: readonly ThemePref[] = ['system', 'light', 'dark'];
@@ -37,6 +39,7 @@ export function parsePrefs(text: string | null): Prefs {
     favourites: Array.isArray(raw.favourites) ? raw.favourites.filter((f): f is string => typeof f === 'string') : [],
     allowMobileData: bool('allowMobileData'),
     onboarded: bool('onboarded'),
+    readCaptions: bool('readCaptions'),
   };
 }
 

@@ -53,7 +53,10 @@ export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
             style={[styles.item, focused && { backgroundColor: colors.tabActiveFill }]}
           >
             <Icon name={meta.icon} color={tint} />
-            <Text style={[type.tab, { color: tint }]}>{meta.label}</Text>
+            {/* The bar has a fixed height, like the system's own tab bars: labels grow a little, not to 200%. */}
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[type.tab, { color: tint }]}>
+              {meta.label}
+            </Text>
           </Pressable>
         );
       })}
