@@ -12,32 +12,19 @@ import java.util.Locale
  *
  * Doing this here, rather than in sherpa-onnx, also means sherpa does not keep its own much
  * larger copy of the lexicon in memory.
+ *
+ * The same tokens also drive Piper (VITS) voices: every phone in the lexicon splits into single
+ * characters, which is what sherpa-onnx's VITS path needs. [withTokens] reuses the lexicon.
  */
-class KittenTokenizer(lexicon: BufferedReader, tokens: BufferedReader) {
+class KittenTokenizer private constructor(
   /** word (NFC, lower case) → space-separated phones, as written in lexicon-en-us.txt */
-  private val words = HashMap<String, String>(200_000)
-  private val tokenSet = HashSet<String>()
+  private val words: HashMap<String, String>,
+  private val tokenSet: Set<String>,
+) {
+  constructor(lexicon: BufferedReader, tokens: BufferedReader) : this(readLexicon(lexicon), readTokens(tokens))
 
-  init {
-    lexicon.useLines { lines ->
-      for (line in lines) {
-        if (line.isEmpty() || line[0] == '#') continue
-        val bar = line.indexOf("||")
-        if (bar < 0) continue
-        val key = key(line.substring(0, bar).trim())
-        val phones = line.substring(bar + 2).trim()
-        // Multi-word entries ("new york") are rare; sherpa-onnx itself rarely matches them.
-        if (key.isNotEmpty() && phones.isNotEmpty() && ' ' !in key) words[key] = phones
-      }
-    }
-    tokens.useLines { lines ->
-      for (line in lines) {
-        val sp = line.lastIndexOf(' ')
-        if (sp < 0) continue
-        tokenSet.add(line.substring(0, sp).ifEmpty { " " })
-      }
-    }
-  }
+  /** The same lexicon (not copied) for another voice model with its own tokens.txt. */
+  fun withTokens(tokens: BufferedReader) = KittenTokenizer(words, readTokens(tokens))
 
   val size: Int get() = words.size
 
@@ -127,6 +114,35 @@ class KittenTokenizer(lexicon: BufferedReader, tokens: BufferedReader) {
   }
 
   companion object {
+    private fun readLexicon(lexicon: BufferedReader): HashMap<String, String> {
+      val words = HashMap<String, String>(200_000)
+      lexicon.useLines { lines ->
+        for (line in lines) {
+          if (line.isEmpty() || line[0] == '#') continue
+          val bar = line.indexOf("||")
+          if (bar < 0) continue
+          val key = key(line.substring(0, bar).trim())
+          val phones = line.substring(bar + 2).trim()
+          // Multi-word entries ("new york") are rare; sherpa-onnx itself rarely matches them.
+          if (key.isNotEmpty() && phones.isNotEmpty() && ' ' !in key) words[key] = phones
+        }
+      }
+      return words
+    }
+
+    /** tokens.txt lines are "<token> <id>"; the space token is written as "  3". */
+    private fun readTokens(tokens: BufferedReader): Set<String> {
+      val set = HashSet<String>()
+      tokens.useLines { lines ->
+        for (line in lines) {
+          val sp = line.lastIndexOf(' ')
+          if (sp < 0) continue
+          set.add(line.substring(0, sp).ifEmpty { " " })
+        }
+      }
+      return set
+    }
+
     /** NFC → lower case → NFC, like sherpa-onnx's NormalizeLexiconKey. */
     fun key(s: String): String =
       Normalizer.normalize(Normalizer.normalize(s, Normalizer.Form.NFC).lowercase(Locale.ROOT), Normalizer.Form.NFC)

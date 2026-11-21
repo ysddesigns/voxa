@@ -14,6 +14,11 @@
     kitten-nano-en-v0_8-int8.tar.bz2                                Apache-2.0
     lexicon-en-us.txt   English pronunciations for Kitten (built from CMUdict)
     silero_vad_v5.onnx                                              MIT
+    sherpa-onnx-pyannote-segmentation-3-0.tar.bz2  (speaker turns)  MIT
+    3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx (who speaks)  Apache-2.0
+    0-four-speakers-zh.wav   test clip with four speakers, for the speaker-label benchmark
+    vits-piper-en_US-amy-low-int8.tar.bz2   Piper voice, benchmark only. Model MIT; the
+                                            Amy recordings' licence is unclear, do not ship it.
 
   sherpa-onnx 2.x no longer uses espeak-ng (GPL-3.0). Kitten reads words through
   lexicon-en-us.txt instead; the espeak-ng-data folder in the Kitten package is
@@ -37,7 +42,12 @@ $files = @(
   @{ Key = 'asr';  Url = "$base/asr-models/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2";          Name = 'sherpa-onnx-streaming-zipformer-en-20M-2023-02-17-mobile.tar.bz2' },
   @{ Key = 'tts';  Url = "$base/tts-models/kitten-nano-en-v0_8-int8.tar.bz2";                                         Name = 'kitten-nano-en-v0_8-int8.tar.bz2' },
   @{ Key = 'lex';  Url = "$base/tts-models/lexicon-en-us.txt";                                                  Name = 'lexicon-en-us.txt' },
-  @{ Key = 'vad';  Url = "$base/asr-models/silero_vad_v5.onnx";                                                       Name = 'silero_vad_v5.onnx' }
+  @{ Key = 'vad';  Url = "$base/asr-models/silero_vad_v5.onnx";                                                       Name = 'silero_vad_v5.onnx' },
+  @{ Key = 'seg';  Url = "$base/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2";          Name = 'sherpa-onnx-pyannote-segmentation-3-0.tar.bz2' },
+  # The release tag really is spelled "recongition".
+  @{ Key = 'emb';  Url = "$base/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx";      Name = '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' },
+  @{ Key = 'diarwav'; Url = "$base/speaker-segmentation-models/0-four-speakers-zh.wav";                               Name = '0-four-speakers-zh.wav' },
+  @{ Key = 'piper'; Url = "$base/tts-models/vits-piper-en_US-amy-low-int8.tar.bz2";                              Name = 'vits-piper-en_US-amy-low-int8.tar.bz2' }
 )
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
@@ -110,6 +120,22 @@ Copy-Item (Join-Path $cache 'downloads\lex\lexicon-en-us.txt') (Join-Path $ttsDs
 Step 'Installing the voice activity detector'
 $vadDst = Fresh (Join-Path $assets 'vad')
 Copy-Item (Join-Path $cache "downloads\vad\silero_vad_v5.onnx") (Join-Path $vadDst 'silero_vad.onnx')
+
+Step 'Installing the speaker-label models'
+$seg = Get-ChildItem (Unpack 'seg' 'sherpa-onnx-pyannote-segmentation-3-0.tar.bz2') -Directory | Select-Object -First 1
+$diarDst = Fresh (Join-Path $assets 'diar')
+$segModel = Get-ChildItem $seg.FullName -Filter '*int8*.onnx' | Select-Object -First 1
+if (-not $segModel) { $segModel = Get-ChildItem $seg.FullName -Filter 'model.onnx' | Select-Object -First 1 }
+Copy-Item $segModel.FullName (Join-Path $diarDst 'segmentation.onnx')
+Copy-Item (Join-Path $cache 'downloads\emb\3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx') (Join-Path $diarDst 'embedding.onnx')
+Copy-Item (Join-Path $cache 'downloads\diarwav\0-four-speakers-zh.wav') (Join-Path $diarDst 'benchmark.wav')
+
+Step 'Installing the Piper voice (benchmark only, no espeak-ng-data)'
+$piper = Get-ChildItem (Unpack 'piper' 'vits-piper-en_US-amy-low-int8.tar.bz2') -Directory | Select-Object -First 1
+$piperDst = Fresh (Join-Path $assets 'piper')
+$piperModel = Get-ChildItem $piper.FullName -Filter '*.onnx' | Select-Object -First 1
+Copy-Item $piperModel.FullName (Join-Path $piperDst 'model.onnx')
+Copy-Item (Join-Path $piper.FullName 'tokens.txt') $piperDst
 
 Step 'Done'
 Get-ChildItem $assets -Directory | ForEach-Object {

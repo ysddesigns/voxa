@@ -1,23 +1,49 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { nativeBenchmark } from '@/engines/native';
+import { parseLongTest, summarizeLongTest, type LongTestSummary } from '@/engines/native/long-test';
 import { useEngineMode, useEngines } from '@/engines/provider';
 import type { ListenSession, SpeakHandle, TranscriptSegment } from '@/engines/types';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { useVoices } from '@/features/voices/voices-store';
-import type { BenchmarkResult } from '../../modules/voxa-engine';
+import { VoxaEngine, type BenchmarkResult } from '../../modules/voxa-engine';
 
 /**
  * Engine lab (internal): switch between the on-device engines and the mocks, run the
  * engine benchmark, and try speaking and listening. Opened from the Home avatar.
  */
 
+const LONG_TEST_MINUTES = 60;
+
+function longTestRows(s: LongTestSummary): Row[] {
+  const n = (x: number, d = 0) => x.toFixed(d);
+  return [
+    { label: 'Ran', value: `${n(s.minutes, 1)} min · screen off ${n(s.screenOffMinutes, 1)} min${s.done ? ` · ${s.reason}` : ' · running'}` },
+    {
+      label: 'Battery',
+      value: s.charged
+        ? `Charged during the test, battery figures not valid`
+        : `${s.batteryUsed}% used${s.batteryPerHour === null ? '' : ` · ${n(s.batteryPerHour, 1)}% per hour`}`,
+      ok: s.charged ? false : undefined,
+    },
+    { label: 'Hottest', value: `${n(s.maxTempC, 1)} °C` },
+    { label: 'Peak memory', value: `${Math.round(s.peakMemoryMb)} MB`, ok: s.peakMemoryMb <= TARGETS.pssMb },
+    {
+      label: 'Listen speed (RTF)',
+      value: s.avgRtf === null ? 'after the first minute' : `average ${s.avgRtf.toFixed(2)} · worst ${s.worstRtf!.toFixed(2)}`,
+      ok: s.worstRtf === null ? undefined : s.worstRtf <= TARGETS.rtf,
+    },
+    { label: 'Words heard', value: String(s.words) },
+  ];
+}
+
 const SAMPLE = 'Good morning. This voice runs on your phone, with no internet. Every word lights up as it is spoken.';
 
 // Spike targets for a 2 GB phone. Tune once the closed beta has real devices.
-const TARGETS = { rtf: 0.5, firstAudioMs: 1000, pssMb: 400 };
+// modelsMb is the Phase 0 gate (under 300 MB for the models); pssMb is the whole debug app.
+const TARGETS = { rtf: 0.5, firstAudioMs: 1000, pssMb: 400, modelsMb: 300 };
 
 type Row = { label: string; value: string; ok?: boolean };
 
@@ -29,10 +55,51 @@ function rows(r: BenchmarkResult): Row[] {
     { label: 'Voices in model', value: String(r.ttsVoices) },
     { label: 'First audio (short sentence)', value: ms(r.ttsFirstAudioMs), ok: r.ttsFirstAudioMs <= TARGETS.firstAudioMs },
     { label: 'Voice speed (RTF)', value: `${r.ttsRtf.toFixed(2)} · ${ms(r.ttsGenMs)} for ${r.ttsAudioSec.toFixed(1)} s`, ok: r.ttsRtf <= TARGETS.rtf },
+    ...(r.piperError
+      ? [{ label: 'Piper voice (compare)', value: r.piperError, ok: false }]
+      : r.piperRtf === undefined
+        ? []
+        : [
+            {
+              label: 'Piper voice (compare)',
+              value: `RTF ${r.piperRtf.toFixed(2)} · first audio ${ms(r.piperFirstAudioMs ?? 0)} · load ${ms(r.piperLoadMs ?? 0)}`,
+              ok: r.piperRtf <= TARGETS.rtf,
+            },
+          ]),
     { label: 'Listen load', value: `${ms(r.asrLoadMs)}${r.asrCold ? '' : ' (already loaded)'}` },
     { label: 'Listen speed (RTF)', value: `${r.asrRtf.toFixed(2)} for ${r.asrAudioSec.toFixed(1)} s`, ok: r.asrRtf <= TARGETS.rtf },
     { label: 'Heard', value: `“${r.asrText.toLowerCase()}”` },
-    { label: 'Memory (PSS)', value: `${Math.round(r.pssMb)} MB · native heap ${Math.round(r.nativeHeapMb)} MB`, ok: r.pssMb <= TARGETS.pssMb },
+    ...(r.vadRtf === undefined
+      ? []
+      : [
+          {
+            label: 'Speech detector (VAD)',
+            value: `RTF ${r.vadRtf.toFixed(3)} · ${r.vadSegments} part(s), ${r.vadSpeechSec?.toFixed(1)} s speech · load ${ms(r.vadLoadMs ?? 0)}`,
+            ok: r.vadRtf <= TARGETS.rtf,
+          },
+        ]),
+    ...(r.diarRtf === undefined
+      ? []
+      : [
+          {
+            label: 'Speaker labels',
+            value: `RTF ${r.diarRtf.toFixed(2)} for ${r.diarAudioSec?.toFixed(0)} s · found ${r.diarSpeakers} of 4 speakers · load ${ms(r.diarLoadMs ?? 0)}`,
+            ok: r.diarRtf <= 1 && r.diarSpeakers === 4,
+          },
+        ]),
+    ...(r.basePssMb === undefined
+      ? []
+      : [
+          {
+            label: 'Memory per model',
+            value: `app ${Math.round(r.basePssMb)} MB · voice +${Math.round(r.ttsMemMb ?? 0)} · listen +${Math.round(r.asrMemMb ?? 0)} · speakers +${Math.round(r.diarMemMb ?? 0)}`,
+            ok: (r.ttsMemMb ?? 0) + (r.asrMemMb ?? 0) + (r.diarMemMb ?? 0) <= TARGETS.modelsMb,
+          },
+        ]),
+    ...(r.peakPssMb === undefined
+      ? []
+      : [{ label: 'Peak memory (all models)', value: `${Math.round(r.peakPssMb)} MB`, ok: r.peakPssMb <= TARGETS.pssMb }]),
+    { label: 'Memory after (PSS)', value: `${Math.round(r.pssMb)} MB · native heap ${Math.round(r.nativeHeapMb)} MB`, ok: r.pssMb <= TARGETS.pssMb },
   ];
 }
 
@@ -58,6 +125,48 @@ export default function EngineLab() {
   const [listenError, setListenError] = useState<string | null>(null);
   const listenRef = useRef<ListenSession | null>(null);
 
+  const longTestAvailable = !!VoxaEngine?.startLongTest;
+  const [longRunning, setLongRunning] = useState(false);
+  const [longSummary, setLongSummary] = useState<LongTestSummary | null>(null);
+  const [longError, setLongError] = useState<string | null>(null);
+
+  const refreshLongTest = () => {
+    if (!VoxaEngine?.longTestReport) return;
+    setLongRunning(VoxaEngine.longTestRunning?.() ?? false);
+    const lines = VoxaEngine.longTestReport();
+    setLongSummary(summarizeLongTest(parseLongTest(lines)));
+    if (__DEV__ && lines.length) console.log('VOXA_LONG_TEST ' + lines[lines.length - 1]);
+  };
+
+  // Show the last test on open, and keep the numbers fresh while one runs.
+  useEffect(() => {
+    const first = setTimeout(refreshLongTest, 0);
+    const timer = setInterval(refreshLongTest, 15_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, []);
+
+  const toggleLongTest = async () => {
+    if (!VoxaEngine?.startLongTest) return;
+    setLongError(null);
+    if (longRunning) {
+      VoxaEngine.stopLongTest?.();
+      setTimeout(refreshLongTest, 1500);
+      return;
+    }
+    try {
+      const perm = await VoxaEngine.requestMicPermission();
+      if (!perm.granted) throw new Error('Voxa needs the microphone for this test.');
+      await VoxaEngine.startLongTest(LONG_TEST_MINUTES);
+      setLongRunning(true);
+      setTimeout(refreshLongTest, 1000);
+    } catch (e) {
+      setLongError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const chosen = voiceId && installed.some((v) => v.id === voiceId) ? voiceId : defaultId;
   const words = SAMPLE.split(/\s+/);
 
@@ -74,7 +183,10 @@ export default function EngineLab() {
     setBenchBusy(true);
     setBenchError(null);
     try {
-      setBench(await nativeBenchmark());
+      const result = await nativeBenchmark();
+      setBench(result);
+      // Shows in the dev server's terminal, so results can be copied without a screenshot.
+      if (__DEV__) console.log('VOXA_BENCHMARK ' + JSON.stringify(result));
     } catch (e) {
       setBenchError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -135,7 +247,7 @@ export default function EngineLab() {
         Engine lab
       </Text>
       <Text style={[type.caption, { color: colors.textTertiary }]}>
-        Internal test build. The device voice reads words from an English dictionary: words it does not know, like many names, are skipped for now.
+        Internal test build. The device voice reads English words from a dictionary, and Yoruba, Igbo and Hausa words from spelling rules. Words it still cannot say are skipped.
       </Text>
 
       {/* Engine switch */}
@@ -168,7 +280,7 @@ export default function EngineLab() {
       <Text style={[type.overline, { color: colors.textSecondary }]}>Benchmark</Text>
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <Text style={[type.caption, { color: colors.textTertiary }]}>
-          Loads both models, speaks a test sentence and transcribes a test clip. Takes a few seconds the first time.
+          Loads every model, speaks a test sentence, transcribes a test clip and labels the speakers in a four-person clip. Takes up to a minute the first time.
         </Text>
         <Button label={bench ? 'Run again' : 'Run benchmark'} onPress={runBench} disabled={!nativeBenchmark} busy={benchBusy} />
         {benchError && <Text style={[type.caption, { color: colors.warning }]}>{benchError}</Text>}
@@ -187,6 +299,34 @@ export default function EngineLab() {
             ✓ = within spike target (RTF ≤ {TARGETS.rtf}, first audio ≤ {TARGETS.firstAudioMs} ms, memory ≤ {TARGETS.pssMb} MB).
           </Text>
         )}
+      </View>
+
+      {/* Screen-off test */}
+      <Text style={[type.overline, { color: colors.textSecondary }]}>60-minute screen-off test</Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        <Text style={[type.caption, { color: colors.textTertiary }]}>
+          Listens for an hour like a meeting, with the screen off. Unplug the charger, start the test, lock the phone and
+          leave it near people talking (or a radio). Results update here every minute and stay after the test.
+        </Text>
+        <Button
+          label={longRunning ? 'Stop test' : longSummary ? 'Start a new test' : 'Start test'}
+          onPress={toggleLongTest}
+          disabled={!longTestAvailable || listening}
+        />
+        {!longTestAvailable && (
+          <Text style={[type.caption, { color: colors.warning }]}>This build has no screen-off test. Rebuild Android.</Text>
+        )}
+        {longError && <Text style={[type.caption, { color: colors.warning }]}>{longError}</Text>}
+        {longSummary &&
+          longTestRows(longSummary).map((r) => (
+            <View key={r.label} style={[styles.row, { borderTopColor: colors.separator }]}>
+              <Text style={[type.caption, { color: colors.textSecondary, flex: 1 }]}>{r.label}</Text>
+              <Text style={[type.callout, { color: colors.text, flex: 1.4, textAlign: 'right' }]}>
+                {r.value}
+                {r.ok === undefined ? '' : r.ok ? '  ✓' : '  ✗'}
+              </Text>
+            </View>
+          ))}
       </View>
 
       {/* Speak */}
@@ -241,7 +381,7 @@ export default function EngineLab() {
           ))
         )}
         {listenError && <Text style={[type.caption, { color: colors.warning }]}>{listenError}</Text>}
-        <Button label={listening ? 'Stop' : 'Start listening'} onPress={toggleListen} />
+        <Button label={listening ? 'Stop' : 'Start listening'} onPress={toggleListen} disabled={longRunning} />
       </View>
     </ScrollView>
   );

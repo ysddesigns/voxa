@@ -3,8 +3,12 @@ package app.voxa.engine
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.os.BatteryManager
+import android.os.PowerManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
@@ -19,13 +23,25 @@ import com.k2fsa.sherpa.onnx.GenerationConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.FastClusteringConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarization
+import com.k2fsa.sherpa.onnx.OfflineSpeakerDiarizationConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationModelConfig
+import com.k2fsa.sherpa.onnx.OfflineSpeakerSegmentationPyannoteModelConfig
+import com.k2fsa.sherpa.onnx.SileroVadModelConfig
+import com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig
+import com.k2fsa.sherpa.onnx.Vad
+import com.k2fsa.sherpa.onnx.VadModelConfig
 import com.k2fsa.sherpa.onnx.WaveReader
 import expo.modules.interfaces.permissions.Permissions
+import org.json.JSONObject
+import java.io.File
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -42,6 +58,11 @@ private const val MODELS = "voxa-models"
 private const val ASR_RATE = 16000
 /** Longer sentences are spoken in pieces, like sherpa-onnx's max_words_in_sentence. */
 private const val MAX_WORDS = 20
+/** The voice is the slowest model; give it up to 4 cores (2 made Kitten slower than real time on a Redmi Note 13). */
+private val TTS_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+private const val LONG_TEST_FILE = "long-test.jsonl"
+/** Silero VAD reads 16 kHz audio in windows of 512 samples (32 ms). */
+private const val VAD_WINDOW = 512
 private val WORD = Regex("\\S+")
 private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
 
@@ -52,7 +73,10 @@ private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
  *    other words from pronunciations the app passes in (Nigerian spelling rules). Word events are
  *    estimated from each piece's audio length, weighted by word length.
  *  - listen: streaming Zipformer 20M (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input.
- *  - benchmark: load time, real-time factor, first-audio latency and memory.
+ *  - benchmark: load time, real-time factor, first-audio latency and memory, for the voice,
+ *    speech recognition, Silero VAD and speaker labels (diarization).
+ *  - long test: listens for up to 60 minutes with the screen off (ListenService keeps the mic on)
+ *    and writes battery, temperature, memory and speed once a minute to long-test.jsonl.
  */
 class VoxaEngineModule : Module() {
   private val context: Context
@@ -69,6 +93,7 @@ class VoxaEngineModule : Module() {
   private val speakGen = AtomicInteger(0)
 
   @Volatile private var listening = false
+  @Volatile private var longTestRunning = false
   private var listenThread: Thread? = null
 
   private class Sentence(val start: Int, val end: Int, val text: String)
@@ -77,7 +102,7 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen")
+    Events("onSpeak", "onListen", "onLongTest")
 
     AsyncFunction("loadVoice") { promise: Promise ->
       thread(name = "voxa-tts-load") {
@@ -138,6 +163,36 @@ class VoxaEngineModule : Module() {
       }
     }
 
+    // The 60-minute screen-off test. Uses the microphone, so normal listening is blocked meanwhile.
+    AsyncFunction("startLongTest") { minutes: Int, promise: Promise ->
+      when {
+        context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ->
+          promise.reject("E_MIC_PERMISSION", "Microphone permission is not granted", null)
+        listening -> promise.reject("E_BUSY", "The microphone is already in use", null)
+        else -> {
+          listening = true
+          longTestRunning = true
+          File(context.filesDir, LONG_TEST_FILE).writeText("")
+          ListenService.start(context, "Voxa test: listening for $minutes minutes")
+          listenThread = thread(name = "voxa-long-test") { runLongTest(minutes.coerceIn(1, 180)) }
+          promise.resolve(null)
+        }
+      }
+    }
+
+    Function("stopLongTest") {
+      if (longTestRunning) listening = false
+      Unit
+    }
+
+    Function("longTestRunning") { longTestRunning }
+
+    /** One JSON object per line: a sample each minute, then a final line with done = true. */
+    Function("longTestReport") {
+      val f = File(context.filesDir, LONG_TEST_FILE)
+      if (f.exists()) f.readLines().filter { it.isNotBlank() } else emptyList()
+    }
+
     Function("release") {
       speakGen.incrementAndGet()
       listening = false
@@ -165,7 +220,7 @@ class VoxaEngineModule : Module() {
           tokens = "$MODELS/tts/tokens.txt",
           // No lexicon here: KittenTokenizer reads it and passes tokens (sherpa-onnx 2.x has no espeak-ng).
         ),
-        numThreads = 2,
+        numThreads = TTS_THREADS,
         debug = false,
         provider = "cpu",
       ),
@@ -249,8 +304,8 @@ class VoxaEngineModule : Module() {
     overrides: Map<String, String> = emptyMap(),
     fallbacks: Map<String, String> = emptyMap(),
     skipped: MutableCollection<String>? = null,
+    tk: KittenTokenizer = tokenizer ?: throw IllegalStateException("The voice is not loaded"),
   ): GeneratedAudio? {
-    val tk = tokenizer ?: throw IllegalStateException("The voice is not loaded")
     val tokens = tk.tokenize(text, overrides, fallbacks, skipped)
     // Only spaces and punctuation means nothing to say.
     if (tokens.none { t -> t.any { it.isLetter() } }) return null
@@ -446,7 +501,109 @@ class VoxaEngineModule : Module() {
     )
   }
 
+  // --- Long screen-off test ------------------------------------------------------------
+
+  @SuppressLint("MissingPermission") // checked in startLongTest
+  private fun runLongTest(minutes: Int) {
+    val file = File(context.filesDir, LONG_TEST_FILE)
+    val power = context.getSystemService(PowerManager::class.java)
+    var rec: AudioRecord? = null
+    val t0 = SystemClock.elapsedRealtime()
+    var words = 0
+    var screenOffMs = 0L
+    var reason = "finished"
+
+    fun record(extra: Map<String, Any>) {
+      val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+      val bm = context.getSystemService(BatteryManager::class.java)
+      val mem = Debug.MemoryInfo()
+      Debug.getMemoryInfo(mem)
+      val now = SystemClock.elapsedRealtime()
+      val row = linkedMapOf<String, Any>(
+        "min" to (now - t0) / 60_000.0,
+        "battery" to bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
+        "tempC" to (battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0,
+        "charging" to ((battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0),
+        "screenOffMin" to screenOffMs / 60_000.0,
+        "pssMb" to mem.totalPss / 1024.0,
+        "words" to words,
+      )
+      row.putAll(extra)
+      val line = JSONObject(row as Map<*, *>).toString()
+      file.appendText(line + "\n")
+      Log.i(TAG, "long test: $line")
+      sendEvent("onLongTest", row)
+    }
+
+    try {
+      val r = ensureAsr()
+      val minBuf = AudioRecord.getMinBufferSize(ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+      rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, max(minBuf, ASR_RATE))
+      if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("The microphone is busy")
+      rec.startRecording()
+      val stream = r.createStream("")
+      val buf = ShortArray(ASR_RATE / 10) // 100 ms
+      val endAt = t0 + minutes * 60_000L
+      var nextSample = t0 + 60_000L
+      var decodeNs = 0L
+      var audioSamples = 0L
+      var lastTick = t0
+      record(mapOf("rtf" to 0.0, "minutes" to minutes))
+      try {
+        while (listening && SystemClock.elapsedRealtime() < endAt) {
+          val n = rec.read(buf, 0, buf.size)
+          if (n <= 0) continue
+          val samples = FloatArray(n) { buf[it] / 32768f }
+          val d0 = System.nanoTime()
+          stream.acceptWaveform(samples, ASR_RATE)
+          while (r.isReady(stream)) r.decode(stream)
+          if (r.isEndpoint(stream)) {
+            val text = r.getResult(stream).text.trim()
+            if (text.isNotEmpty()) words += text.split(' ').size
+            r.reset(stream)
+          }
+          decodeNs += System.nanoTime() - d0
+          audioSamples += n
+          val now = SystemClock.elapsedRealtime()
+          if (!power.isInteractive) screenOffMs += now - lastTick
+          lastTick = now
+          if (now >= nextSample) {
+            // Speed over the last minute: decode time / audio time (lower is faster).
+            record(mapOf("rtf" to decodeNs / 1e9 / (audioSamples.toDouble() / ASR_RATE)))
+            decodeNs = 0L
+            audioSamples = 0L
+            nextSample += 60_000L
+          }
+        }
+        if (!listening) reason = "stopped"
+      } finally {
+        stream.release()
+      }
+    } catch (e: Throwable) {
+      Log.e(TAG, "long test failed", e)
+      reason = e.message ?: "failed"
+    } finally {
+      try { rec?.stop() } catch (_: Throwable) {}
+      rec?.release()
+      try { record(mapOf("done" to true, "reason" to reason)) } catch (e: Throwable) { Log.e(TAG, "long test: last sample failed", e) }
+      listening = false
+      longTestRunning = false
+      ListenService.stop(context)
+    }
+  }
+
   // --- Benchmark ---------------------------------------------------------------------
+
+  /** Whole-app memory (PSS) in MB, after a garbage collection so freed Java objects do not count. */
+  private fun pssMb(): Double {
+    Runtime.getRuntime().gc()
+    val m = Debug.MemoryInfo()
+    Debug.getMemoryInfo(m)
+    return m.totalPss / 1024.0
+  }
+
+  private fun assetExists(path: String): Boolean =
+    try { context.assets.open(path).close(); true } catch (_: Throwable) { false }
 
   private fun runBenchmark(): Map<String, Any> {
     val out = linkedMapOf<String, Any>()
@@ -454,9 +611,18 @@ class VoxaEngineModule : Module() {
     out["android"] = Build.VERSION.RELEASE
     out["abi"] = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
     out["cores"] = Runtime.getRuntime().availableProcessors()
+    out["ttsThreads"] = TTS_THREADS
+    if (listening) throw IllegalStateException("Stop listening before running the benchmark")
+
+    // Start from nothing loaded, so each model's memory can be measured on its own.
+    speakGen.incrementAndGet()
+    releaseModels()
+    val base = pssMb()
+    out["basePssMb"] = base
 
     out["ttsCold"] = tts == null
     val t = ensureTts()
+    out["ttsMemMb"] = pssMb() - base
     out["ttsLoadMs"] = ttsLoadMs.toDouble()
     out["ttsVoices"] = t.numSpeakers()
 
@@ -473,7 +639,42 @@ class VoxaEngineModule : Module() {
     out["ttsAudioSec"] = audioSec
     out["ttsRtf"] = genMs / 1000.0 / audioSec
 
+    // Piper (VITS, Amy low, int8) for comparison. It is loaded only here and released at once,
+    // so the peak memory below is for the models the app really uses.
+    if (assetExists("$MODELS/piper/model.onnx")) {
+      t0 = SystemClock.elapsedRealtime()
+      val piper = OfflineTts(
+        assetManager = context.assets,
+        config = OfflineTtsConfig(
+          model = OfflineTtsModelConfig(
+            vits = OfflineTtsVitsModelConfig(model = "$MODELS/piper/model.onnx", tokens = "$MODELS/piper/tokens.txt"),
+            numThreads = 2,
+            debug = false,
+            provider = "cpu",
+          ),
+          maxNumSentences = 1,
+        ),
+      )
+      try {
+        val ptk = tokenizer!!.withTokens(context.assets.open("$MODELS/piper/tokens.txt").bufferedReader(Charsets.UTF_8))
+        out["piperLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+        t0 = SystemClock.elapsedRealtime()
+        synth(piper, "Hello there.", 0, 1f, tk = ptk) ?: throw IllegalStateException("Piper produced no audio")
+        out["piperFirstAudioMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+        t0 = SystemClock.elapsedRealtime()
+        val pa = synth(piper, sample, 0, 1f, tk = ptk) ?: throw IllegalStateException("Piper produced no audio")
+        val pMs = SystemClock.elapsedRealtime() - t0
+        out["piperRtf"] = pMs / 1000.0 / (pa.samples.size.toDouble() / pa.sampleRate)
+      } catch (e: Throwable) {
+        Log.e(TAG, "Piper benchmark failed", e)
+        out["piperError"] = e.message ?: e.toString()
+      } finally {
+        piper.release()
+      }
+    }
+
     out["asrCold"] = recognizer == null
+    val beforeAsr = pssMb()
     val r = ensureAsr()
     out["asrLoadMs"] = asrLoadMs.toDouble()
     val wave = WaveReader.readWave(context.assets, "$MODELS/asr/benchmark.wav")
@@ -488,7 +689,92 @@ class VoxaEngineModule : Module() {
     out["asrText"] = r.getResult(stream).text.trim()
     stream.release()
     out["asrAudioSec"] = asrSec
+    out["asrMemMb"] = pssMb() - beforeAsr
     out["asrRtf"] = asrMs / 1000.0 / asrSec
+
+    // Silero VAD (finds where speech starts and stops) over the same clip, in 512-sample windows.
+    t0 = SystemClock.elapsedRealtime()
+    val vad = Vad(
+      assetManager = context.assets,
+      config = VadModelConfig(
+        sileroVadModelConfig = SileroVadModelConfig(
+          model = "$MODELS/vad/silero_vad.onnx",
+          threshold = 0.5f,
+          minSilenceDuration = 0.25f,
+          minSpeechDuration = 0.25f,
+          windowSize = VAD_WINDOW,
+        ),
+        sampleRate = ASR_RATE,
+        numThreads = 1,
+        provider = "cpu",
+      ),
+    )
+    out["vadLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+    try {
+      t0 = SystemClock.elapsedRealtime()
+      var speechSamples = 0L
+      var segments = 0
+      val drain = {
+        while (!vad.empty()) {
+          speechSamples += vad.front().samples.size
+          segments++
+          vad.pop()
+        }
+      }
+      var i = 0
+      while (i + VAD_WINDOW <= wave.samples.size) {
+        vad.acceptWaveform(wave.samples.copyOfRange(i, i + VAD_WINDOW))
+        drain()
+        i += VAD_WINDOW
+      }
+      vad.flush()
+      drain()
+      val vadMs = SystemClock.elapsedRealtime() - t0
+      out["vadRtf"] = vadMs / 1000.0 / asrSec
+      out["vadSegments"] = segments
+      out["vadSpeechSec"] = speechSamples.toDouble() / ASR_RATE
+    } finally {
+      vad.release()
+    }
+
+    val beforeDiar = pssMb()
+    // Speaker labels (pyannote segmentation + CAM++ embeddings) on a clip with four speakers.
+    // Runs after a recording ends, so it is timed as a whole, not streamed.
+    t0 = SystemClock.elapsedRealtime()
+    val diar = OfflineSpeakerDiarization(
+      assetManager = context.assets,
+      config = OfflineSpeakerDiarizationConfig(
+        segmentation = OfflineSpeakerSegmentationModelConfig(
+          pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(model = "$MODELS/diar/segmentation.onnx"),
+          numThreads = 2,
+        ),
+        embedding = SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
+        // numClusters = -1: the number of speakers is not known, so the threshold decides.
+        clustering = FastClusteringConfig(numClusters = -1, threshold = 0.5f),
+        minDurationOn = 0.3f,
+        minDurationOff = 0.5f,
+      ),
+    )
+    out["diarLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+    try {
+      val clip = WaveReader.readWave(context.assets, "$MODELS/diar/benchmark.wav")
+      if (clip.sampleRate != diar.sampleRate()) throw IllegalStateException("Speaker clip is ${clip.sampleRate} Hz, expected ${diar.sampleRate()}")
+      t0 = SystemClock.elapsedRealtime()
+      val turns = diar.process(clip.samples)
+      val diarMs = SystemClock.elapsedRealtime() - t0
+      val clipSec = clip.samples.size.toDouble() / clip.sampleRate
+      out["diarAudioSec"] = clipSec
+      out["diarRtf"] = diarMs / 1000.0 / clipSec
+      out["diarSpeakers"] = turns.map { it.speaker }.distinct().size
+      out["diarTurns"] = turns.size
+      // Peak: voice, listening and speaker models are all loaded at this point.
+      val peak = Debug.MemoryInfo()
+      Debug.getMemoryInfo(peak)
+      out["peakPssMb"] = peak.totalPss / 1024.0
+      out["diarMemMb"] = peak.totalPss / 1024.0 - beforeDiar
+    } finally {
+      diar.release()
+    }
 
     val mem = Debug.MemoryInfo()
     Debug.getMemoryInfo(mem)

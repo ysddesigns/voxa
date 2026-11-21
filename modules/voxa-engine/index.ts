@@ -31,8 +31,47 @@ export type BenchmarkResult = {
   asrText: string;
   asrAudioSec: number;
   asrRtf: number;
+  /** Silero VAD over the listen clip. Missing in builds made before 21 Nov 2026. */
+  vadLoadMs?: number;
+  vadRtf?: number;
+  vadSegments?: number;
+  vadSpeechSec?: number;
+  /** Memory split: the app before any model, then what each model adds (MB). Builds from 21 Nov 2026. */
+  basePssMb?: number;
+  ttsMemMb?: number;
+  asrMemMb?: number;
+  diarMemMb?: number;
+  ttsThreads?: number;
+  /** Piper (Amy low, int8) for comparison with Kitten; benchmark only. */
+  piperLoadMs?: number;
+  piperFirstAudioMs?: number;
+  piperRtf?: number;
+  piperError?: string;
+  /** Speaker labels on a four-speaker clip, and memory with every model loaded. */
+  diarLoadMs?: number;
+  diarAudioSec?: number;
+  diarRtf?: number;
+  diarSpeakers?: number;
+  diarTurns?: number;
+  peakPssMb?: number;
   pssMb: number;
   nativeHeapMb: number;
+};
+
+/** One line of the screen-off test log: a sample each minute, then a last line with done = true. */
+export type LongTestSample = {
+  min: number;
+  battery: number;
+  tempC: number;
+  charging: boolean;
+  screenOffMin: number;
+  pssMb: number;
+  words: number;
+  /** Decode time / audio time over the last minute (0 on the first line). */
+  rtf: number;
+  minutes?: number;
+  done?: boolean;
+  reason?: string;
 };
 
 type VoxaEngineNative = {
@@ -44,9 +83,16 @@ type VoxaEngineNative = {
   startListening(): Promise<{ loadMs: number }>;
   stopListening(): Promise<void>;
   benchmark(): Promise<BenchmarkResult>;
+  /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */
+  startLongTest?(minutes: number): Promise<void>;
+  stopLongTest?(): void;
+  longTestRunning?(): boolean;
+  /** JSON lines, each a LongTestSample. */
+  longTestReport?(): string[];
   release(): void;
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): EventSubscription;
+  addListener(event: 'onLongTest', listener: (e: LongTestSample) => void): EventSubscription;
 };
 
 /** Null on iOS, web, Jest, and Android builds made before the module was added. */
