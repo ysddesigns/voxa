@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useEngines } from '@/engines/provider';
 import { useModels } from '@/features/packs/models';
+import { usePrefs } from '@/features/settings/prefs';
 import type { SessionMeta, SessionStore } from '@/storage/sessions';
 import { labelSession } from './label';
 import { IDLE, ListenRecorder, type RecorderState } from './recorder';
@@ -87,20 +88,26 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
     [speech, store, summary],
   );
 
-  const stop = useCallback(async () => {
-    const id = await recorder.stop();
-    setVersion((v) => v + 1);
-    // Speaker labels run straight after the meeting, while the phone is otherwise idle
-    // (when the speaker-label models are on the phone; otherwise the session screen offers them).
-    if (id && speech.labelSpeakers && speakersReady) label(id);
-    return id;
+  const { prefs } = usePrefs();
+
+  // After every stop (from the app or the notification's Stop button): reload lists, and run
+  // speaker labels straight away while the phone is otherwise idle (when the speaker-label models
+  // are on the phone; otherwise the session screen offers them).
+  useEffect(() => {
+    recorder.onStopped((id) => {
+      setVersion((v) => v + 1);
+      if (id && speech.labelSpeakers && speakersReady) label(id);
+    });
+    return () => recorder.onStopped(null);
   }, [recorder, speech, label, speakersReady]);
+
+  const stop = useCallback(() => recorder.stop(), [recorder]);
 
   const value = useMemo<ListenValue>(
     () => ({
       ...state,
       elapsedMs: () => recorder.elapsedMs(),
-      start: () => recorder.start(),
+      start: () => recorder.start({ noticeCaptions: prefs.noticeCaptions }),
       pause: () => recorder.pause(),
       resume: () => recorder.resume(),
       mark: (l?: string) => {
@@ -117,7 +124,7 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
       version,
       bump,
     }),
-    [state, recorder, stop, speech, labelling, label, recovered, version, bump],
+    [state, recorder, stop, speech, labelling, label, recovered, version, bump, prefs.noticeCaptions],
   );
 
   return <ListenContext.Provider value={value}>{children}</ListenContext.Provider>;

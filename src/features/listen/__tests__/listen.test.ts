@@ -91,6 +91,63 @@ describe('native listen session', () => {
   });
 });
 
+describe('Listen notification', () => {
+  function noticeNative() {
+    const base = fakeNative(3000);
+    let action: ((e: { action: 'pause' | 'resume' | 'mark' | 'stop' }) => void) | null = null;
+    const n = base.native as unknown as Record<string, unknown>;
+    const add = n.addListener as (event: string, l: (e: never) => void) => { remove(): void };
+    n.addListener = (event: string, l: (e: never) => void) => {
+      if (event !== 'onListenAction') return add(event, l);
+      action = l as typeof action;
+      return { remove: () => (action = null) };
+    };
+    n.showListenNotice = jest.fn();
+    n.endListenNotice = jest.fn();
+    return { ...base, show: n.showListenNotice as jest.Mock, end: n.endListenNotice as jest.Mock, press: (a: 'pause' | 'resume' | 'mark' | 'stop') => action?.({ action: a }), hasAction: () => action !== null };
+  }
+
+  it('follows the session: listening, paused with the time heard, then gone', async () => {
+    const { native, show, end, emit } = noticeNative();
+    let t = 0;
+    const s = await startNativeListen(native, () => {}, { title: 'Standup', noticeCaptions: false }, () => t);
+    expect(show).toHaveBeenLastCalledWith('Standup', false, 0, '');
+    emit({ type: 'segment', index: 0, text: 'secret plans', startMs: 0, endMs: 900, final: true });
+    expect(show).toHaveBeenCalledTimes(1); // no captions unless asked for
+    t = 5000;
+    await s.pause();
+    expect(show).toHaveBeenLastCalledWith('Standup', true, 3000, '');
+    await s.resume();
+    expect(show).toHaveBeenLastCalledWith('Standup', false, 3000, '');
+    await s.stop();
+    expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the latest sentence only when asked', async () => {
+    const { native, show, emit } = noticeNative();
+    await startNativeListen(native, () => {}, { noticeCaptions: true }, () => 0);
+    emit({ type: 'segment', index: 0, text: 'hello there', startMs: 0, endMs: 900, final: true });
+    expect(show).toHaveBeenLastCalledWith('Voxa is listening', false, 0, 'hello there');
+  });
+
+  it('passes the buttons on as actions, until the session stops', async () => {
+    const { native, press, hasAction } = noticeNative();
+    const events: ListenEvent[] = [];
+    const s = await startNativeListen(native, (e) => events.push(e), {}, () => 0);
+    press('mark');
+    expect(events).toContainEqual({ type: 'action', action: 'mark' });
+    await s.stop();
+    expect(hasAction()).toBe(false);
+  });
+
+  it('removes the notification when listening cannot start', async () => {
+    const { native, end } = noticeNative();
+    (native.startListening as jest.Mock).mockRejectedValueOnce(new Error('The microphone is busy'));
+    await expect(startNativeListen(native, () => {}, {}, () => 0)).rejects.toThrow('busy');
+    expect(end).toHaveBeenCalled();
+  });
+});
+
 describe('ListenRecorder', () => {
   function setup() {
     const files = memoryFiles();
@@ -114,6 +171,21 @@ describe('ListenRecorder', () => {
     const rec = new ListenRecorder(engine, store, (s) => states.push(s.status), quickSummary, () => 1_700_000_000_000);
     return { rec, store, files, engine, emit: (e: ListenEvent) => push(e), setElapsed: (ms: number) => (elapsed = ms), states };
   }
+
+  it('carries out the notification buttons, and stopping from there runs the after-stop work', async () => {
+    const { rec, emit } = setup();
+    const stopped: (string | null)[] = [];
+    rec.onStopped((id) => stopped.push(id));
+    await rec.start();
+    const id = rec.current.sessionId;
+    emit({ type: 'action', action: 'mark' });
+    expect(rec.current.marks).toHaveLength(1);
+    emit({ type: 'action', action: 'stop' });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(stopped).toEqual([id]);
+    expect(rec.current.status).toBe('idle');
+  });
 
   it('saves each sentence and mark as it happens, then the summary on stop', async () => {
     const { rec, store, emit, setElapsed } = setup();

@@ -38,6 +38,12 @@ export class ListenRecorder {
   private session: ListenSession | null = null;
   private writes: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Runs after every stop, from the app or the notification's Stop button (speaker labels, list reload). */
+  private afterStop: ((id: string | null) => void) | null = null;
+
+  onStopped(fn: ((id: string | null) => void) | null) {
+    this.afterStop = fn;
+  }
 
   constructor(
     private readonly engine: SpeechEngine,
@@ -72,7 +78,8 @@ export class ListenRecorder {
     return this.writes;
   }
 
-  async start(): Promise<void> {
+  /** noticeCaptions: put the latest sentence in the Listen notification. */
+  async start(options: { noticeCaptions?: boolean } = {}): Promise<void> {
     if (this.state.status !== 'idle') return;
     const startedAt = this.now();
     const id = newSessionId(startedAt);
@@ -107,8 +114,15 @@ export class ListenRecorder {
           case 'error':
             this.set({ error: e.message });
             break;
+          case 'action':
+            // A notification button, pressed with the app in the background or on the lock screen.
+            if (e.action === 'pause') void this.pause();
+            else if (e.action === 'resume') void this.resume();
+            else if (e.action === 'mark') this.mark();
+            else if (e.action === 'stop') void this.stop();
+            break;
         }
-      }, { audioPath: this.store.audioPath(id) });
+      }, { audioPath: this.store.audioPath(id), title, noticeCaptions: options.noticeCaptions });
     } catch (err) {
       await this.store.remove(id).catch(() => {});
       this.set({ ...IDLE, error: friendlyError(err) });
@@ -169,6 +183,7 @@ export class ListenRecorder {
       );
     }
     this.set({ ...IDLE, error: savedId ? this.state.error : 'Nothing was heard, so nothing was saved.' });
+    this.afterStop?.(savedId);
     return savedId;
   }
 }

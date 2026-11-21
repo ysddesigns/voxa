@@ -1,4 +1,4 @@
-import type { NativeListenEvent, NativeSpeakerTurn } from '../../../modules/voxa-engine';
+import type { ListenAction, NativeListenEvent, NativeSpeakerTurn } from '../../../modules/voxa-engine';
 import type { ListenEvent, ListenOptions, ListenSession, SpeakerTurn, TranscriptSegment } from '../types';
 import { tidyTranscript } from './text';
 
@@ -9,7 +9,10 @@ export type ListenNative = {
   stopListening(): Promise<{ heardMs: number } | null | void>;
   labelSpeakers?(audioPath: string): Promise<NativeSpeakerTurn[]>;
   cancelLabel?(): void;
+  showListenNotice?(title: string, paused: boolean, elapsedMs: number, caption: string): void;
+  endListenNotice?(): void;
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): { remove(): void };
+  addListener(event: 'onListenAction', listener: (e: { action: ListenAction }) => void): { remove(): void };
   addListener(event: 'onLabel', listener: (e: { fraction: number }) => void): { remove(): void };
 };
 
@@ -19,6 +22,9 @@ export type ListenNative = {
  * Pause really stops the microphone (and the "listening" notice); resume starts a new native run.
  * Each run's times start at zero, so segments are shifted by the audio heard in earlier runs, and
  * get ids "n<run>-<index>" so they stay unique across pauses.
+ *
+ * The Listen notification (builds with showListenNotice) follows the session: it shows listening or
+ * paused with the time, and its buttons arrive as "action" events for the recorder to carry out.
  */
 export async function startNativeListen(
   native: ListenNative,
@@ -41,6 +47,24 @@ export async function startNativeListen(
   let paused = false;
   let stopped = false;
   let busy: Promise<void> = Promise.resolve();
+  let caption = '';
+  const title = options.title || 'Voxa is listening';
+
+  const notice = () => {
+    try {
+      native.showListenNotice?.(title, paused, elapsedMs(), options.noticeCaptions ? caption : '');
+    } catch {
+      // The notification is a convenience; listening goes on without it.
+    }
+  };
+  const endNotice = () => {
+    try {
+      native.endListenNotice?.();
+    } catch {
+      // As above.
+    }
+  };
+  const actions = native.showListenNotice ? native.addListener('onListenAction', (e) => onEvent({ type: 'action', action: e.action })) : null;
 
   const sub = native.addListener('onListen', (e: NativeListenEvent) => {
     if (e.type === 'level') {
@@ -58,6 +82,10 @@ export async function startNativeListen(
       };
       if (e.final) finals.set(segment.id, segment);
       onEvent({ type: 'segment', segment });
+      if (e.final && options.noticeCaptions && segment.text.trim() && !paused) {
+        caption = segment.text;
+        notice();
+      }
     }
   });
 
@@ -65,6 +93,8 @@ export async function startNativeListen(
     await begin();
   } catch (err) {
     sub.remove();
+    actions?.remove();
+    endNotice();
     throw err;
   }
 
@@ -82,6 +112,7 @@ export async function startNativeListen(
   };
 
   const elapsedMs = () => (paused || stopped ? offsetMs : offsetMs + (now() - runStartedAt));
+  notice();
 
   return {
     pause: () =>
@@ -89,6 +120,8 @@ export async function startNativeListen(
         if (paused || stopped) return;
         paused = true;
         await endRun();
+        caption = '';
+        notice();
         onEvent({ type: 'paused', reason: 'user' });
       }),
     resume: () =>
@@ -98,6 +131,7 @@ export async function startNativeListen(
         runStartedAt = now();
         await begin();
         paused = false;
+        notice();
         onEvent({ type: 'resumed' });
       }),
     elapsedMs,
@@ -111,6 +145,8 @@ export async function startNativeListen(
         stopped = true;
       });
       sub.remove();
+      actions?.remove();
+      endNotice();
       return [...finals.values()].sort((a, b) => a.startMs - b.startMs);
     },
   };

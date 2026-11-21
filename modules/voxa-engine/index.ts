@@ -89,6 +89,9 @@ export type NativePackEvent =
 
 export type NativeScanLine = { text: string; confidence: number; unsureWords: string[]; top: number; left: number; block: number };
 
+/** A button on the Listen notification. */
+export type ListenAction = 'pause' | 'resume' | 'mark' | 'stop';
+
 export type NativeSpeakerTurn = { startMs: number; endMs: number; speaker: number };
 
 export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
@@ -118,6 +121,14 @@ type VoxaEngineNative = {
   startListening(audioPath: string): Promise<{ loadMs: number }>;
   /** Builds with labelSpeakers resolve with the audio this run heard; older ones with null. */
   stopListening(): Promise<{ heardMs: number } | null>;
+  /**
+   * The Listen notification (Android's Live Activity): timer, listening or paused, Pause/Resume,
+   * Mark and Stop buttons (sent back as onListenAction), and an optional latest sentence that never
+   * shows on the lock screen. Builds from 21 Nov 2026.
+   */
+  showListenNotice?(title: string, paused: boolean, elapsedMs: number, caption: string): void;
+  /** The session ended: the notification goes once the microphone is off. */
+  endListenNotice?(): void;
   /** Speaker turns for a recording; progress arrives as onLabel events. Builds from 21 Nov 2026. */
   labelSpeakers?(audioPath: string): Promise<NativeSpeakerTurn[]>;
   cancelLabel?(): void;
@@ -147,6 +158,7 @@ type VoxaEngineNative = {
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): EventSubscription;
   addListener(event: 'onLongTest', listener: (e: LongTestSample) => void): EventSubscription;
+  addListener(event: 'onListenAction', listener: (e: { action: ListenAction }) => void): EventSubscription;
 };
 
 /** Null on iOS, web, Jest, and Android builds made before the module was added. */

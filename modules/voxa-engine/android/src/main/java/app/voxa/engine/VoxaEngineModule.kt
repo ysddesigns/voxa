@@ -122,6 +122,8 @@ class VoxaEngineModule : Module() {
   /** Audio heard by the last listening run, so the app can line up runs split by pauses. */
   @Volatile private var lastHeardMs = 0L
   @Volatile private var labelling = false
+  /** A Listen session owns the notification (and its service) from start to stop, pauses included. */
+  @Volatile private var noticeActive = false
   @Volatile private var labelCancel = false
 
   private class Sentence(val start: Int, val end: Int, val text: String)
@@ -130,7 +132,32 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel")
+    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction")
+
+    // Notification buttons (Pause, Resume, Mark, Stop) go to the app, which does the work and
+    // sends the new state back with showListenNotice.
+    OnCreate {
+      ListenService.onAction = { action -> sendEvent("onListenAction", mapOf("action" to action)) }
+    }
+
+    // The Listen notification: title, listening or paused, time listened (the system keeps the
+    // timer running), and the latest sentence ("" for none; never shown on the lock screen).
+    Function("showListenNotice") { title: String, paused: Boolean, elapsedMs: Double, caption: String ->
+      noticeActive = true
+      try {
+        ListenService.update(context, ListenService.Notice(title, paused, elapsedMs.toLong(), caption, actions = true))
+      } catch (e: Throwable) {
+        Log.w(TAG, "could not show the listening notification", e)
+      }
+      Unit
+    }
+
+    // The session ended: remove the notification once the microphone is off.
+    Function("endListenNotice") {
+      noticeActive = false
+      if (!listening) ListenService.stop(context)
+      Unit
+    }
 
     // Warms up a voice ("" = built-in, else a pack id). Does not replace a voice already loaded,
     // so opening the Voices screen never interrupts speech in another voice.
@@ -363,6 +390,10 @@ class VoxaEngineModule : Module() {
     }
 
     OnDestroy {
+      // The app (or its JS) is going away: no one is left to answer the notification's buttons.
+      ListenService.onAction = null
+      noticeActive = false
+      try { appContext.reactContext?.let { ListenService.stop(it) } } catch (_: Throwable) {}
       speakGen.incrementAndGet()
       listening = false
       releaseModels()
@@ -777,7 +808,8 @@ class VoxaEngineModule : Module() {
       rec?.release()
       try { audioOut?.close() } catch (_: Throwable) {}
       listening = false
-      ListenService.stop(context)
+      // While a session is only paused, the service (and its notification) stays for Resume.
+      if (!noticeActive) ListenService.stop(context)
     }
   }
 

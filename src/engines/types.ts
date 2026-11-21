@@ -62,7 +62,9 @@ export type ListenEvent =
   | { type: 'level'; rms: number }
   | { type: 'paused'; reason: 'user' | 'call' | 'interruption' }
   | { type: 'resumed' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  /** A button on the Listen notification; the recorder carries it out. */
+  | { type: 'action'; action: 'pause' | 'resume' | 'mark' | 'stop' };
 
 export interface ListenSession {
   /** Stops the microphone; listened time stops counting until resume. */
@@ -80,6 +82,10 @@ export type ListenOptions = {
    * meeting. Ignored by engines that cannot label speakers.
    */
   audioPath?: string;
+  /** Shown on the Listen notification (Android). */
+  title?: string;
+  /** Put the latest sentence in the notification (never on the lock screen). */
+  noticeCaptions?: boolean;
 };
 
 export type SpeakerTurn = { startMs: number; endMs: number; speaker: number };

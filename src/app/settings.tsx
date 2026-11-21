@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -102,6 +102,14 @@ export default function SettingsScreen() {
             value={prefs.readCaptions}
             onChange={(v) => update({ readCaptions: v })}
           />
+          {Platform.OS === 'android' ? (
+            <Toggle
+              label="Show captions in the notification"
+              hint="The newest sentence appears in the Listening notification. It is never shown on the lock screen."
+              value={prefs.noticeCaptions}
+              onChange={(v) => update({ noticeCaptions: v })}
+            />
+          ) : null}
         </Section>
 
         <Section title="Downloads">
