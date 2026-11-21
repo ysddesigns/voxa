@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useEngines } from '@/engines/provider';
+import { usePrefs } from '@/features/settings/prefs';
 import type { DownloadHandle, SpeakHandle, Voice } from '@/engines/types';
 
 /**
  * Voices: the list, the default voice, favourites, downloads and sample previews.
- * Kept in memory for now; saved to the phone with the Library work (phase 1, weeks 13–16).
+ * The chosen voice and favourites are saved on the phone (prefs.json).
  */
 
 export const SAMPLE_TEXT = 'Hi, I am your Voxa voice. I can read anything you type, even with no signal.';
@@ -35,8 +36,16 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
   // Loading until the current engine's voice list has arrived (the engine can switch at runtime).
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
   const loading = loadedFor !== engine;
-  const [defaultId, setDefault] = useState('lily');
-  const [favourites, setFavourites] = useState<ReadonlySet<string>>(new Set(['lily']));
+  // The chosen voice and favourites are saved in prefs. Each engine has its own voices, so the
+  // default falls back to the first installed one when the chosen voice is not there.
+  const { prefs, update } = usePrefs();
+  const chosen = prefs.voiceId;
+  const defaultId = useMemo(() => {
+    if (voices.some((v) => v.id === chosen && v.installed)) return chosen;
+    return voices.find((v) => v.installed)?.id ?? (chosen || 'lily');
+  }, [voices, chosen]);
+  const setDefault = useCallback((id: string) => update({ voiceId: id }), [update]);
+  const favourites = useMemo<ReadonlySet<string>>(() => new Set(prefs.favourites), [prefs.favourites]);
   const [downloads, setDownloads] = useState<Record<string, number>>({});
   const [downloadErrors, setDownloadErrors] = useState<Record<string, string>>({});
   const [previewingId, setPreviewingId] = useState<string | null>(null);
@@ -55,10 +64,6 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
       .then((list) => {
         if (!live) return;
         setVoices(list);
-        // Each engine has its own voices; keep the default pointing at one that is installed.
-        setDefault((current) =>
-          list.some((v) => v.id === current && v.installed) ? current : (list.find((v) => v.installed)?.id ?? current),
-        );
         setLoadedFor(engine);
       })
       .catch(() => {
@@ -73,14 +78,15 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
     };
   }, [engine]);
 
-  const toggleFavourite = useCallback((id: string) => {
-    setFavourites((prev) => {
-      const next = new Set(prev);
+  const toggleFavourite = useCallback(
+    (id: string) => {
+      const next = new Set(prefs.favourites);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
-    });
-  }, []);
+      update({ favourites: [...next] });
+    },
+    [prefs.favourites, update],
+  );
 
   const download = useCallback(
     (id: string) => {
@@ -144,7 +150,7 @@ export function VoicesProvider({ children }: { children: ReactNode }) {
       togglePreview,
       byId: (id) => voices.find((v) => v.id === id),
     }),
-    [voices, loading, defaultId, favourites, toggleFavourite, downloads, download, cancelDownload, downloadErrors, previewingId, togglePreview],
+    [voices, loading, defaultId, setDefault, favourites, toggleFavourite, downloads, download, cancelDownload, downloadErrors, previewingId, togglePreview],
   );
 
   return <VoicesContext.Provider value={value}>{children}</VoicesContext.Provider>;

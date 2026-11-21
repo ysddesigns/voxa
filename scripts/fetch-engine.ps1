@@ -5,8 +5,12 @@
   The files are large and are ignored by Git; run this after cloning.
 
 .EXAMPLE
-  .\scripts\fetch-engine.ps1          # download what is missing, then install
-  .\scripts\fetch-engine.ps1 -Force   # download everything again
+  .\scripts\fetch-engine.ps1             # slim app: voice, lexicon, punctuation, benchmark clips
+  .\scripts\fetch-engine.ps1 -BundleAll  # also bundle listening, speaker-label and Kitten models (lab builds)
+  .\scripts\fetch-engine.ps1 -Force      # download everything again
+
+  The slim app stays under the 60 MB gate. Listening (ASR + VAD) and speaker labels come as
+  packs downloaded in the app (src/features/packs/catalogue.ts), offered during setup.
 
   Sources (all from https://github.com/k2-fsa/sherpa-onnx/releases):
     sherpa-onnx-2.0.1.aar                                           Apache-2.0
@@ -28,7 +32,8 @@
 #>
 param(
   [string]$SherpaVersion = '2.0.1',
-  [switch]$Force
+  [switch]$Force,
+  [switch]$BundleAll
 )
 
 $ErrorActionPreference = 'Stop'
@@ -109,29 +114,41 @@ foreach ($part in 'encoder', 'decoder', 'joiner') {
 }
 Copy-Item (Join-Path $asr.FullName 'tokens.txt') $asrDst
 $wav = Get-ChildItem (Join-Path $asr.FullName 'test_wavs') -Filter '*.wav' -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($wav) { Copy-Item $wav.FullName (Join-Path $asrDst 'benchmark.wav') }
 
-Step 'Installing the Kitten voice (benchmark comparison) and the English lexicon'
-$tts = Get-ChildItem (Unpack 'tts' $files[2].Name) -Directory | Select-Object -First 1
-$ttsDst = Fresh (Join-Path $assets 'tts')
-$model = Get-ChildItem $tts.FullName -Filter '*.onnx' | Select-Object -First 1
-Copy-Item $model.FullName (Join-Path $ttsDst 'model.onnx')
-Copy-Item (Join-Path $tts.FullName 'voices.bin') $ttsDst
-Copy-Item (Join-Path $tts.FullName 'tokens.txt') $ttsDst
-Copy-Item (Join-Path $cache 'downloads\lex\lexicon-en-us.txt') (Join-Path $ttsDst 'lexicon.txt')
+# Benchmark clips stay in every build (2 MB), in bench/.
+$bench = Fresh (Join-Path $assets 'bench')
+if ($wav) { Copy-Item $wav.FullName (Join-Path $bench 'asr.wav') }
+Copy-Item (Join-Path $cache 'downloads\diarwav\0-four-speakers-zh.wav') (Join-Path $bench 'diar.wav')
 
-Step 'Installing the voice activity detector'
-$vadDst = Fresh (Join-Path $assets 'vad')
-Copy-Item (Join-Path $cache "downloads\vad\silero_vad_v5.onnx") (Join-Path $vadDst 'silero_vad.onnx')
+function Drop($name) {
+  $d = Join-Path $assets $name
+  if (Test-Path $d) { Remove-Item -Recurse -Force $d; Write-Host "  removed models/$name (downloaded as a pack in the app)" }
+}
 
-Step 'Installing the speaker-label models'
-$seg = Get-ChildItem (Unpack 'seg' 'sherpa-onnx-pyannote-segmentation-3-0.tar.bz2') -Directory | Select-Object -First 1
-$diarDst = Fresh (Join-Path $assets 'diar')
-$segModel = Get-ChildItem $seg.FullName -Filter '*int8*.onnx' | Select-Object -First 1
-if (-not $segModel) { $segModel = Get-ChildItem $seg.FullName -Filter 'model.onnx' | Select-Object -First 1 }
-Copy-Item $segModel.FullName (Join-Path $diarDst 'segmentation.onnx')
-Copy-Item (Join-Path $cache 'downloads\emb\3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx') (Join-Path $diarDst 'embedding.onnx')
-Copy-Item (Join-Path $cache 'downloads\diarwav\0-four-speakers-zh.wav') (Join-Path $diarDst 'benchmark.wav')
+if ($BundleAll) {
+  Step 'Kitten voice (benchmark comparison only)'
+  $tts = Get-ChildItem (Unpack 'tts' $files[2].Name) -Directory | Select-Object -First 1
+  $ttsDst = Fresh (Join-Path $assets 'tts')
+  $model = Get-ChildItem $tts.FullName -Filter '*.onnx' | Select-Object -First 1
+  Copy-Item $model.FullName (Join-Path $ttsDst 'model.onnx')
+  Copy-Item (Join-Path $tts.FullName 'voices.bin') $ttsDst
+  Copy-Item (Join-Path $tts.FullName 'tokens.txt') $ttsDst
+
+  Step 'Voice activity detector'
+  $vadDst = Fresh (Join-Path $assets 'vad')
+  Copy-Item (Join-Path $cache "downloads\vad\silero_vad_v5.onnx") (Join-Path $vadDst 'silero_vad.onnx')
+
+  Step 'Speaker-label models'
+  $seg = Get-ChildItem (Unpack 'seg' 'sherpa-onnx-pyannote-segmentation-3-0.tar.bz2') -Directory | Select-Object -First 1
+  $diarDst = Fresh (Join-Path $assets 'diar')
+  $segModel = Get-ChildItem $seg.FullName -Filter '*int8*.onnx' | Select-Object -First 1
+  if (-not $segModel) { $segModel = Get-ChildItem $seg.FullName -Filter 'model.onnx' | Select-Object -First 1 }
+  Copy-Item $segModel.FullName (Join-Path $diarDst 'segmentation.onnx')
+  Copy-Item (Join-Path $cache 'downloads\emb\3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx') (Join-Path $diarDst 'embedding.onnx')
+} else {
+  Step 'Slim app: listening and speaker-label models come as packs'
+  Drop 'asr'; Drop 'tts'; Drop 'vad'; Drop 'diar'
+}
 
 Step 'Installing the speaking voice: Piper LJSpeech medium (no espeak-ng-data)'
 $voice = Get-ChildItem (Unpack 'voice' 'vits-piper-en_US-ljspeech-medium-int8.tar.bz2') -Directory | Select-Object -First 1
@@ -139,6 +156,8 @@ $voiceDst = Fresh (Join-Path $assets 'voice')
 $voiceModel = Get-ChildItem $voice.FullName -Filter '*.onnx' | Select-Object -First 1
 Copy-Item $voiceModel.FullName (Join-Path $voiceDst 'model.onnx')
 Copy-Item (Join-Path $voice.FullName 'tokens.txt') $voiceDst
+# English pronunciations (CMUdict), shared by every voice.
+Copy-Item (Join-Path $cache 'downloads\lex\lexicon-en-us.txt') (Join-Path $voiceDst 'lexicon.txt')
 # Amy (unclear licence) was only for the Phase 0 comparison; make sure it is not shipped.
 $oldPiper = Join-Path $assets 'piper'
 if (Test-Path $oldPiper) { Remove-Item -Recurse -Force $oldPiper }

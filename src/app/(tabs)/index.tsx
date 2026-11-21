@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useRouter } from 'expo-router';
+import { Link, Redirect, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/icons';
 import { Screen } from '@/components/screen';
@@ -11,6 +11,7 @@ import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
+import { usePrefs } from '@/features/settings/prefs';
 import { sessionStore } from '@/storage';
 import type { SessionMeta } from '@/storage/sessions';
 
@@ -43,8 +44,12 @@ export default function Home() {
   const router = useRouter();
   const tier = useDeviceTier();
   const recent = useRecent();
+  const { prefs, loaded } = usePrefs();
   const now = new Date();
   const overline = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // First run: setup before anything else.
+  if (loaded && !prefs.onboarded) return <Redirect href="/welcome" />;
 
   return (
     <Screen
@@ -53,8 +58,8 @@ export default function Home() {
       right={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Settings and engine lab"
-          onPress={() => router.push('/engine-lab')}
+          accessibilityLabel="Settings"
+          onPress={() => router.push('/settings')}
           style={[styles.avatar, { backgroundColor: colors.chip }]}
         >
           <Icon name="person" color={colors.text} />

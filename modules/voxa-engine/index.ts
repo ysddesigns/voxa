@@ -136,7 +136,10 @@ type VoxaEngineNative = {
   installedPacks?(): string[];
   packManifest?(id: string): string | null;
   deletePack?(id: string): void;
-  storageInfo?(): { freeBytes: number };
+  /** Builds from 22 Nov 2026 also report what Voxa stores (bytes per pack id, sessions, meeting audio). */
+  storageInfo?(): { freeBytes: number; packBytes?: Record<string, number>; sessionBytes?: number; audioBytes?: number };
+  /** Which engine models are ready (bundled in the app or downloaded as packs). Builds from 22 Nov 2026. */
+  modelStatus?(): { listen: boolean; speakers: boolean; bundledListen: boolean; bundledSpeakers: boolean };
   networkInfo?(): { connected: boolean; unmetered: boolean };
   release(): void;
   addListener(event: 'onLabel', listener: (e: { fraction: number }) => void): EventSubscription;

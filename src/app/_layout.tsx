@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -14,7 +14,8 @@ import { VoxaThemeProvider, useTheme } from '@/design/theme';
 import { EngineProvider } from '@/engines/provider';
 import { ListenSessionProvider } from '@/features/listen/listen-session';
 import { SpeakSessionProvider } from '@/features/speak/speak-session';
-import { PrefsProvider } from '@/features/settings/prefs';
+import { ModelsProvider } from '@/features/packs/models';
+import { PrefsProvider, usePrefs } from '@/features/settings/prefs';
 import { prefsStore, sessionStore } from '@/storage';
 import { VoicesProvider } from '@/features/voices/voices-store';
 
@@ -32,6 +33,8 @@ function Root() {
         <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="phrases" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="welcome" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen
           name="voice-picker"
@@ -44,6 +47,16 @@ function Root() {
         />
       </Stack>
     </>
+  );
+}
+
+/** Light, dark or follow the phone, saved in prefs. */
+function SavedTheme({ children }: { children: ReactNode }) {
+  const { prefs, update } = usePrefs();
+  return (
+    <VoxaThemeProvider preference={prefs.theme} onPreferenceChange={(theme) => update({ theme })}>
+      {children}
+    </VoxaThemeProvider>
   );
 }
 
@@ -64,18 +77,20 @@ export default function RootLayout() {
   // nothing is mounted is dropped ("NAVIGATE ... was not handled"). The splash screen stays
   // up until the fonts are ready, so nothing shows in the fallback font.
   return (
-    <VoxaThemeProvider>
-      <EngineProvider>
-        <PrefsProvider store={prefsStore}>
-          <VoicesProvider>
-            <SpeakSessionProvider>
-              <ListenSessionProvider store={sessionStore}>
-                <Root />
-              </ListenSessionProvider>
-            </SpeakSessionProvider>
-          </VoicesProvider>
-        </PrefsProvider>
-      </EngineProvider>
-    </VoxaThemeProvider>
+    <PrefsProvider store={prefsStore}>
+      <SavedTheme>
+        <EngineProvider>
+          <ModelsProvider>
+            <VoicesProvider>
+              <SpeakSessionProvider>
+                <ListenSessionProvider store={sessionStore}>
+                  <Root />
+                </ListenSessionProvider>
+              </SpeakSessionProvider>
+            </VoicesProvider>
+          </ModelsProvider>
+        </EngineProvider>
+      </SavedTheme>
+    </PrefsProvider>
   );
 }

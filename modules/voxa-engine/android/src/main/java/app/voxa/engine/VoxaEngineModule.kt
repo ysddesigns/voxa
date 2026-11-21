@@ -68,6 +68,9 @@ private const val MAX_WORDS = 20
 /** The voice is the slowest model; give it up to 4 cores (2 made Kitten slower than real time on a Redmi Note 13). */
 private val TTS_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 private const val LONG_TEST_FILE = "long-test.jsonl"
+/** Model packs (src/features/packs/catalogue.ts): listening (ASR + VAD) and speaker labels. */
+private const val LISTEN_PACK = "listen-en"
+private const val SPEAKERS_PACK = "speakers"
 /** Clustering threshold for meetings: 0.5 found 7 speakers in a 4-speaker clip, so start higher. Tune on real meetings. */
 private const val LABEL_THRESHOLD = 0.6f
 /** Silero VAD reads 16 kHz audio in windows of 512 samples (32 ms). */
@@ -319,7 +322,21 @@ class VoxaEngineModule : Module() {
       Unit
     }
 
-    Function("storageInfo") { mapOf("freeBytes" to packs.freeBytes().toDouble()) }
+    Function("modelStatus") { modelStatus() }
+
+    // Free space, and what Voxa keeps: each pack, saved sessions, and meeting audio waiting for speaker labels.
+    Function("storageInfo") {
+      val sessions = File(context.filesDir, "voxa/sessions")
+      var audio = 0L
+      var other = 0L
+      sessions.walkTopDown().filter { it.isFile }.forEach { if (it.name == "audio.pcm") audio += it.length() else other += it.length() }
+      mapOf(
+        "freeBytes" to packs.freeBytes().toDouble(),
+        "packBytes" to packs.installed().associateWith { id -> packs.dir(id).walkTopDown().filter { it.isFile }.sumOf { it.length() }.toDouble() },
+        "sessionBytes" to other.toDouble(),
+        "audioBytes" to audio.toDouble(),
+      )
+    }
 
     Function("networkInfo") {
       val (connected, unmetered) = packs.network()
@@ -379,7 +396,7 @@ class VoxaEngineModule : Module() {
     }
     // The lexicon is the same for every voice: read it once, then only swap the token list.
     tokenizer = tokenizer?.withTokens(tokens)
-      ?: KittenTokenizer(context.assets.open("$MODELS/tts/lexicon.txt").bufferedReader(Charsets.UTF_8), tokens)
+      ?: KittenTokenizer(context.assets.open(lexiconAsset()).bufferedReader(Charsets.UTF_8), tokens)
     val old = tts
     if (old != null) {
       // Older speech was already stopped by the speak call that asked for this voice; wait for
@@ -420,22 +437,23 @@ class VoxaEngineModule : Module() {
   private fun ensureAsr(): OnlineRecognizer = synchronized(lock) {
     recognizer?.let { return it }
     val t0 = SystemClock.elapsedRealtime()
+    val m = models(LISTEN_PACK, "asr", "encoder.onnx")
     val config = OnlineRecognizerConfig(
       featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80),
       modelConfig = OnlineModelConfig(
         transducer = OnlineTransducerModelConfig(
-          encoder = "$MODELS/asr/encoder.onnx",
-          decoder = "$MODELS/asr/decoder.onnx",
-          joiner = "$MODELS/asr/joiner.onnx",
+          encoder = "${m.path}/encoder.onnx",
+          decoder = "${m.path}/decoder.onnx",
+          joiner = "${m.path}/joiner.onnx",
         ),
-        tokens = "$MODELS/asr/tokens.txt",
+        tokens = "${m.path}/tokens.txt",
         numThreads = 2,
         provider = "cpu",
       ),
       enableEndpoint = true,
       decodingMethod = "greedy_search",
     )
-    val created = OnlineRecognizer(assetManager = context.assets, config = config)
+    val created = OnlineRecognizer(assetManager = m.assets, config = config)
     asrLoadMs = SystemClock.elapsedRealtime() - t0
     recognizer = created
     created
@@ -767,12 +785,12 @@ class VoxaEngineModule : Module() {
    * pyannote segmentation + CAM++ embeddings. numClusters = -1: the number of speakers is not
    * known, so the threshold decides (higher = fewer speakers).
    */
-  private fun diarConfig(threshold: Float) = OfflineSpeakerDiarizationConfig(
+  private fun diarConfig(m: ModelDir, threshold: Float) = OfflineSpeakerDiarizationConfig(
     segmentation = OfflineSpeakerSegmentationModelConfig(
-      pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(model = "$MODELS/diar/segmentation.onnx"),
+      pyannote = OfflineSpeakerSegmentationPyannoteModelConfig(model = "${m.path}/segmentation.onnx"),
       numThreads = 2,
     ),
-    embedding = SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
+    embedding = SpeakerEmbeddingExtractorConfig(model = "${m.path}/embedding.onnx", numThreads = 2),
     clustering = FastClusteringConfig(numClusters = -1, threshold = threshold),
     minDurationOn = 0.3f,
     minDurationOff = 0.5f,
@@ -786,10 +804,11 @@ class VoxaEngineModule : Module() {
   }
 
   private fun runLabel(audio: File): List<SpeakerLabeller.Turn> {
-    val diar = OfflineSpeakerDiarization(assetManager = context.assets, config = diarConfig(LABEL_THRESHOLD))
+    val m = models(SPEAKERS_PACK, "diar", "embedding.onnx")
+    val diar = OfflineSpeakerDiarization(assetManager = m.assets, config = diarConfig(m, LABEL_THRESHOLD))
     val extractor = SpeakerEmbeddingExtractor(
-      context.assets,
-      SpeakerEmbeddingExtractorConfig(model = "$MODELS/diar/embedding.onnx", numThreads = 2),
+      m.assets,
+      SpeakerEmbeddingExtractorConfig(model = "${m.path}/embedding.onnx", numThreads = 2),
     )
     try {
       var lastSent = -1
@@ -943,11 +962,16 @@ class VoxaEngineModule : Module() {
   }
 
   /** Silero VAD for 16 kHz audio. Small (2 MB) and fast, so each listening session makes its own. */
-  private fun newVad() = Vad(
-    assetManager = context.assets,
+  private fun newVad(): Vad {
+    val m = models(LISTEN_PACK, "vad", "silero_vad.onnx")
+    return newVad(m)
+  }
+
+  private fun newVad(m: ModelDir) = Vad(
+    assetManager = m.assets,
     config = VadModelConfig(
       sileroVadModelConfig = SileroVadModelConfig(
-        model = "$MODELS/vad/silero_vad.onnx",
+        model = "${m.path}/silero_vad.onnx",
         threshold = 0.5f,
         minSilenceDuration = 0.25f,
         minSpeechDuration = 0.25f,
@@ -961,6 +985,36 @@ class VoxaEngineModule : Module() {
 
   private fun assetExists(path: String): Boolean =
     try { context.assets.open(path).close(); true } catch (_: Throwable) { false }
+
+  /** Benchmark clips: in bench/ (slim builds), or beside their models (older asset layouts). */
+  private fun benchClip(name: String): String =
+    if (assetExists("$MODELS/bench/$name.wav")) "$MODELS/bench/$name.wav" else "$MODELS/$name/benchmark.wav"
+
+  private fun lexiconAsset(): String =
+    if (assetExists("$MODELS/voice/lexicon.txt")) "$MODELS/voice/lexicon.txt" else "$MODELS/tts/lexicon.txt"
+
+  /** Where a set of models lives: an installed pack (real files, no asset manager) or the copy bundled in the app. */
+  private class ModelDir(val assets: android.content.res.AssetManager?, val path: String)
+
+  /** Thrown when neither the pack nor a bundled copy is there; the app offers the download. */
+  class MissingPack(val packId: String) : IllegalStateException("NEEDS_PACK:$packId")
+
+  private fun hasPack(packId: String, probe: String) =
+    packs.installed().contains(packId) && File(packs.dir(packId), probe).isFile
+
+  private fun models(packId: String, assetDir: String, probe: String): ModelDir = when {
+    hasPack(packId, probe) -> ModelDir(null, packs.dir(packId).path)
+    assetExists("$MODELS/$assetDir/$probe") -> ModelDir(context.assets, "$MODELS/$assetDir")
+    else -> throw MissingPack(packId)
+  }
+
+  /** Which model sets are ready, bundled or downloaded. */
+  private fun modelStatus() = mapOf(
+    "listen" to (hasPack(LISTEN_PACK, "encoder.onnx") || assetExists("$MODELS/asr/encoder.onnx")),
+    "speakers" to (hasPack(SPEAKERS_PACK, "embedding.onnx") || assetExists("$MODELS/diar/embedding.onnx")),
+    "bundledListen" to assetExists("$MODELS/asr/encoder.onnx"),
+    "bundledSpeakers" to assetExists("$MODELS/diar/embedding.onnx"),
+  )
 
   private fun runBenchmark(): Map<String, Any> {
     val out = linkedMapOf<String, Any>()
@@ -1025,7 +1079,7 @@ class VoxaEngineModule : Module() {
     val beforeAsr = pssMb()
     val r = ensureAsr()
     out["asrLoadMs"] = asrLoadMs.toDouble()
-    val wave = WaveReader.readWave(context.assets, "$MODELS/asr/benchmark.wav")
+    val wave = WaveReader.readWave(context.assets, benchClip("asr"))
     val stream = r.createStream("")
     t0 = SystemClock.elapsedRealtime()
     stream.acceptWaveform(wave.samples, wave.sampleRate)
@@ -1081,10 +1135,11 @@ class VoxaEngineModule : Module() {
     // Speaker labels (pyannote segmentation + CAM++ embeddings) on a clip with four speakers.
     // Runs after a recording ends, so it is timed as a whole, not streamed.
     t0 = SystemClock.elapsedRealtime()
-    val diar = OfflineSpeakerDiarization(assetManager = context.assets, config = diarConfig(0.5f))
+    val dm = models(SPEAKERS_PACK, "diar", "embedding.onnx")
+    val diar = OfflineSpeakerDiarization(assetManager = dm.assets, config = diarConfig(dm, 0.5f))
     out["diarLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
     try {
-      val clip = WaveReader.readWave(context.assets, "$MODELS/diar/benchmark.wav")
+      val clip = WaveReader.readWave(context.assets, benchClip("diar"))
       if (clip.sampleRate != diar.sampleRate()) throw IllegalStateException("Speaker clip is ${clip.sampleRate} Hz, expected ${diar.sampleRate()}")
       t0 = SystemClock.elapsedRealtime()
       val turns = diar.process(clip.samples)

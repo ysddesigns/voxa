@@ -3,11 +3,13 @@ import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-nat
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
+import { ModelRow } from '@/components/model-row';
 import { Screen } from '@/components/screen';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { useListen } from '@/features/listen/listen-session';
+import { useModels } from '@/features/packs/models';
 import { formatClock } from '@/features/listen/format';
 import type { TranscriptSegment } from '@/engines/types';
 import type { Mark } from '@/storage/sessions';
@@ -23,6 +25,7 @@ function Ready() {
   const { colors } = useTheme();
   const router = useRouter();
   const l = useListen();
+  const models = useModels();
   return (
     <Screen title="Live" overline="Listen">
       {l.recovered.length > 0 ? (
@@ -49,18 +52,25 @@ function Ready() {
         <Text style={[type.body, { color: colors.textSecondary }]}>
           Voxa writes down what it hears, on this phone, with no internet. It keeps listening with the screen off. Everything is saved as it goes.
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Start listening"
-          onPress={() => {
-            l.clearError();
-            void l.start();
-          }}
-          style={({ pressed }) => [styles.start, { backgroundColor: pressed ? colors.accentText : colors.accent }]}
-        >
-          <Icon name="mic" color={colors.onAccent} />
-          <Text style={[type.bodyStrong, { color: colors.onAccent }]}>Start listening</Text>
-        </Pressable>
+        {models.ready.listen ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start listening"
+            onPress={() => {
+              l.clearError();
+              void l.start();
+            }}
+            style={({ pressed }) => [styles.start, { backgroundColor: pressed ? colors.accentText : colors.accent }]}
+          >
+            <Icon name="mic" color={colors.onAccent} />
+            <Text style={[type.bodyStrong, { color: colors.onAccent }]}>Start listening</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Text style={[type.callout, { color: colors.text }]}>First, a one-time download. After that Live works with no internet.</Text>
+            <ModelRow id="listen" title="Listening" what="Live captions in English" />
+          </>
+        )}
       </View>
 
       {l.error ? <Text style={[type.callout, { color: colors.accentText }]}>{l.error}</Text> : null}

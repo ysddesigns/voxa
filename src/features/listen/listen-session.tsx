@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useEngines } from '@/engines/provider';
+import { useModels } from '@/features/packs/models';
 import type { SessionMeta, SessionStore } from '@/storage/sessions';
 import { labelSession } from './label';
 import { IDLE, ListenRecorder, type RecorderState } from './recorder';
@@ -36,6 +37,8 @@ const ListenContext = createContext<ListenValue | null>(null);
 
 export function ListenSessionProvider({ children, store }: { children: ReactNode; store: SessionStore }) {
   const { speech, summary } = useEngines();
+  const models = useModels();
+  const speakersReady = models.ready.speakers;
   const [state, setState] = useState<RecorderState>(IDLE);
   const [labelling, setLabelling] = useState<Labelling | null>(null);
   const [recovered, setRecovered] = useState<SessionMeta[]>([]);
@@ -72,7 +75,8 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
       job.done
         .then(() => setLabelling({ id, fraction: 1, error: null, done: true }))
         .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : 'Could not find the speakers';
+          const raw = err instanceof Error ? err.message : 'Could not find the speakers';
+          const message = /NEEDS_PACK/.test(raw) ? 'Speaker labels need a one-time download first.' : raw;
           setLabelling({ id, fraction: 0, error: /cancel/i.test(message) ? null : message, done: true });
         })
         .finally(() => {
@@ -86,10 +90,11 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
   const stop = useCallback(async () => {
     const id = await recorder.stop();
     setVersion((v) => v + 1);
-    // Speaker labels run straight after the meeting, while the phone is otherwise idle.
-    if (id && speech.labelSpeakers) label(id);
+    // Speaker labels run straight after the meeting, while the phone is otherwise idle
+    // (when the speaker-label models are on the phone; otherwise the session screen offers them).
+    if (id && speech.labelSpeakers && speakersReady) label(id);
     return id;
-  }, [recorder, speech, label]);
+  }, [recorder, speech, label, speakersReady]);
 
   const value = useMemo<ListenValue>(
     () => ({

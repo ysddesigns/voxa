@@ -1,5 +1,5 @@
 import { memoryFiles } from '@/storage/files';
-import { parsePrefs, PrefsStore } from '@/storage/prefs';
+import { DEFAULT_PREFS, parsePrefs, PrefsStore } from '@/storage/prefs';
 import { DEFAULT_PHRASES, parsePhrases, PhraseStore } from '../phrases';
 
 function store(initial: Record<string, string> = {}) {
@@ -47,14 +47,14 @@ describe('PhraseStore', () => {
 
 describe('prefs', () => {
   it('falls back to defaults for missing or bad values', () => {
-    expect(parsePrefs(null)).toEqual({ discreet: false });
-    expect(parsePrefs('{"discreet":"yes"}')).toEqual({ discreet: false });
-    expect(parsePrefs('not json')).toEqual({ discreet: false });
+    expect(parsePrefs(null)).toEqual(DEFAULT_PREFS);
+    expect(parsePrefs('{"discreet":"yes","theme":"pink","favourites":["a",2]}')).toEqual({ ...DEFAULT_PREFS, favourites: ['a'] });
+    expect(parsePrefs('not json')).toEqual(DEFAULT_PREFS);
   });
 
   it('saves and loads', async () => {
     const s = new PrefsStore(memoryFiles());
-    await s.save({ discreet: true });
-    expect(await s.load()).toEqual({ discreet: true });
+    await s.save({ ...DEFAULT_PREFS, discreet: true, theme: 'dark' });
+    expect(await s.load()).toEqual({ ...DEFAULT_PREFS, discreet: true, theme: 'dark' });
   });
 });

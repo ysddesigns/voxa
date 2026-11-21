@@ -22,13 +22,24 @@ export function resolveScheme(
   return system === 'dark' ? 'dark' : 'light';
 }
 
-export function VoxaThemeProvider({ children }: { children: ReactNode }) {
+/** Pass preference and onPreferenceChange to keep the choice somewhere (Settings saves it); otherwise it lives in memory. */
+export function VoxaThemeProvider({
+  children,
+  preference: controlled,
+  onPreferenceChange,
+}: {
+  children: ReactNode;
+  preference?: ThemePreference;
+  onPreferenceChange?: (p: ThemePreference) => void;
+}) {
   const system = useColorScheme();
-  const [preference, setPreference] = useState<ThemePreference>('system');
+  const [own, setOwn] = useState<ThemePreference>('system');
+  const preference = controlled ?? own;
+  const setPreference = onPreferenceChange ?? setOwn;
   const value = useMemo<ThemeValue>(() => {
     const scheme = resolveScheme(preference, system);
     return { colors: scheme === 'dark' ? dark : light, scheme, preference, setPreference };
-  }, [preference, system]);
+  }, [preference, system, setPreference]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

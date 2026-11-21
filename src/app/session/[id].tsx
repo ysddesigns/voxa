@@ -3,11 +3,13 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Tex
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
+import { ModelRow } from '@/components/model-row';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatClock, formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
+import { useModels } from '@/features/packs/models';
 import { speakerName } from '@/features/listen/speakers';
 import { useSpeakSession } from '@/features/speak/speak-session';
 import { sessionStore } from '@/storage';
@@ -22,6 +24,7 @@ export default function SessionScreen() {
   const insets = useSafeAreaInsets();
   const l = useListen();
   const speak = useSpeakSession();
+  const models = useModels();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [title, setTitle] = useState('');
 
@@ -161,6 +164,11 @@ export default function SessionScreen() {
                 <Pressable onPress={l.cancelLabel} accessibilityRole="button" style={[styles.pill, { backgroundColor: colors.chip }]}>
                   <Text style={[type.callout, { color: colors.text }]}>Cancel</Text>
                 </Pressable>
+              </>
+            ) : session.hasAudio && l.canLabel && !models.ready.speakers ? (
+              <>
+                <Text style={[type.caption, { color: colors.textTertiary }]}>Labelling speakers needs a one-time download. The audio waits on this phone until then.</Text>
+                <ModelRow id="speakers" title="Speaker labels" what="Who spoke when" />
               </>
             ) : session.hasAudio && l.canLabel ? (
               <>

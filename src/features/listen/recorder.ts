@@ -22,6 +22,13 @@ export type RecorderState = {
   error: string | null;
 };
 
+/** Native errors name a missing pack as "NEEDS_PACK:<id>"; say what to do instead. */
+export function friendlyError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  if (/NEEDS_PACK/.test(message)) return 'Listening needs a one-time download first.';
+  return message || 'Could not start listening';
+}
+
 export const IDLE: RecorderState = { status: 'idle', sessionId: null, title: '', segments: [], partial: '', level: 0, marks: [], error: null };
 
 const SAVE_EVERY_MS = 5000;
@@ -104,7 +111,7 @@ export class ListenRecorder {
       }, { audioPath: this.store.audioPath(id) });
     } catch (err) {
       await this.store.remove(id).catch(() => {});
-      this.set({ ...IDLE, error: err instanceof Error ? err.message : 'Could not start listening' });
+      this.set({ ...IDLE, error: friendlyError(err) });
       return;
     }
     this.set({ status: 'listening' });
