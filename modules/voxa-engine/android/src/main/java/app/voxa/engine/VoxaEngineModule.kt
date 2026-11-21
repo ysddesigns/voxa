@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.media.AudioFormat
@@ -107,6 +109,7 @@ class VoxaEngineModule : Module() {
   private val speakGen = AtomicInteger(0)
 
   @Volatile private var listening = false
+  @Volatile private var privateOutput = false
   @Volatile private var longTestRunning = false
   private val packs by lazy { PackStore(context) }
   /** Pack id → cancel requested, for installs in progress. */
@@ -145,6 +148,13 @@ class VoxaEngineModule : Module() {
     Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String ->
       val gen = speakGen.incrementAndGet()
       thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice) }
+      Unit
+    }
+
+    // "room" (loudspeaker, the default) or "private": earbuds when connected, else the earpiece
+    // held to the ear like a call. Applies from the next speak.
+    Function("setOutput") { mode: String ->
+      privateOutput = mode == "private"
       Unit
     }
 
@@ -508,6 +518,7 @@ class VoxaEngineModule : Module() {
 
   private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String) {
     fun live() = speakGen.get() == gen
+    var private = false
     try {
       val engine = ensureTts(voice)
       if (!live()) return
@@ -518,10 +529,12 @@ class VoxaEngineModule : Module() {
 
       val rate = engine.sampleRate()
       val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
+      private = privateOutput
+      if (private) routePrivate(true)
       val track = AudioTrack.Builder()
         .setAudioAttributes(
           AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setUsage(if (private) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build(),
         )
@@ -562,6 +575,43 @@ class VoxaEngineModule : Module() {
     } catch (e: Throwable) {
       Log.e(TAG, "speak failed", e)
       if (live()) emitSpeak(id, "error", mapOf("message" to (e.message ?: "Speech failed")))
+    } finally {
+      // Hand the audio route back, unless a newer private speech is using it (it clears it when done).
+      if (private && (live() || !privateOutput)) routePrivate(false)
+    }
+  }
+
+  /** Private output: call-style audio to earbuds if any are connected, otherwise the earpiece. */
+  private fun routePrivate(on: Boolean) {
+    val am = context.getSystemService(AudioManager::class.java) ?: return
+    try {
+      if (Build.VERSION.SDK_INT >= 31) {
+        if (!on) {
+          am.clearCommunicationDevice()
+          return
+        }
+        val devices = am.availableCommunicationDevices
+        val preferred = listOf(
+          AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+          AudioDeviceInfo.TYPE_BLE_HEADSET,
+          AudioDeviceInfo.TYPE_WIRED_HEADSET,
+          AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+          AudioDeviceInfo.TYPE_USB_HEADSET,
+          AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+        )
+        val device = preferred.firstNotNullOfOrNull { t -> devices.firstOrNull { it.type == t } }
+        if (device != null) am.setCommunicationDevice(device)
+      } else {
+        @Suppress("DEPRECATION")
+        if (on) {
+          am.mode = AudioManager.MODE_IN_COMMUNICATION
+          am.isSpeakerphoneOn = false
+        } else {
+          am.mode = AudioManager.MODE_NORMAL
+        }
+      }
+    } catch (e: Throwable) {
+      Log.w(TAG, "could not change the audio route", e)
     }
   }
 

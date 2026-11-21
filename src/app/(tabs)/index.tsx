@@ -92,7 +92,7 @@ export default function Home() {
       </Pressable>
 
       <View style={styles.tiles}>
-        <Tile icon="chat" title="Speak for me" sub="Type, then play" onPress={() => router.push('/editor')} />
+        <Tile icon="chat" title="Speak for me" sub="Phrases, type and play" onPress={() => router.push('/phrases')} />
         <Tile icon="mic" title="Start listening" sub="Live captions" onPress={() => router.push('/live')} />
       </View>
 

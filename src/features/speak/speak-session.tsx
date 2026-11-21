@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useEngines } from '@/engines/provider';
 import type { SpeakHandle } from '@/engines/types';
+import { usePrefs } from '@/features/settings/prefs';
 import { useVoices } from '@/features/voices/voices-store';
 import {
   clampIndex,
@@ -44,6 +45,12 @@ type SpeakValue = {
   stop: () => void;
   seekFraction: (f: number) => void;
   skip: (seconds: number) => void;
+  /** Speaks a quick phrase now, stopping the script if it is playing. Tapping the same phrase again stops it. */
+  say: (text: string) => void;
+  /** The quick phrase being spoken. */
+  saying: string | null;
+  /** Discreet mode: earbuds or earpiece, never the loudspeaker. */
+  output: 'room' | 'private';
 };
 
 const SpeakContext = createContext<SpeakValue | null>(null);
@@ -65,6 +72,9 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<PlayStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [wordIndex, setWordIndex] = useState(0);
+  const [saying, setSaying] = useState<string | null>(null);
+  const { prefs } = usePrefs();
+  const output = prefs.discreet ? 'private' : 'room';
 
   const words = useMemo(() => tokenize(text), [text]);
   const handle = useRef<SpeakHandle | null>(null);
@@ -76,6 +86,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     generation.current++;
     handle.current?.stop();
     handle.current = null;
+    setSaying(null);
   }, []);
 
   useEffect(() => halt, [halt]);
@@ -90,7 +101,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       setWordIndex(start);
       setError(null);
       setStatus('playing');
-      handle.current = engine.speak(text.slice(offset), { voiceId: withVoice, rate: atRate }, (e) => {
+      handle.current = engine.speak(text.slice(offset), { voiceId: withVoice, rate: atRate, output }, (e) => {
         if (gen !== generation.current) return;
         if (e.type === 'word') setWordIndex(wordAtChar(words, e.charStart + offset));
         if (e.type === 'error') {
@@ -104,7 +115,28 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [engine, halt, words, text, rate, effectiveVoice],
+    [engine, halt, words, text, rate, effectiveVoice, output],
+  );
+
+  const say = useCallback(
+    (phrase: string) => {
+      const same = saying === phrase;
+      halt();
+      if (status !== 'idle') setStatus('paused');
+      if (same || !phrase.trim()) return;
+      const gen = generation.current;
+      setError(null);
+      setSaying(phrase);
+      handle.current = engine.speak(phrase, { voiceId: effectiveVoice, rate, output }, (e) => {
+        if (gen !== generation.current) return;
+        if (e.type === 'error') setError(e.message);
+        if (e.type === 'end' || e.type === 'error') {
+          handle.current = null;
+          setSaying(null);
+        }
+      });
+    },
+    [engine, halt, saying, status, effectiveVoice, rate, output],
   );
 
   const pause = useCallback(() => {
@@ -194,6 +226,9 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     stop,
     seekFraction,
     skip,
+    say,
+    saying,
+    output,
   };
 
   return <SpeakContext.Provider value={value}>{children}</SpeakContext.Provider>;

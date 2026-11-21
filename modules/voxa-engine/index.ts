@@ -106,6 +106,8 @@ type VoxaEngineNative = {
     voice: string,
   ): void;
   stopSpeaking(): void;
+  /** "room" = loudspeaker, "private" = earbuds or earpiece. Builds from 22 Nov 2026. */
+  setOutput?(mode: 'room' | 'private'): void;
   requestMicPermission(): Promise<{ granted: boolean; status: string; canAskAgain?: boolean }>;
   /**
    * audioPath (builds with labelSpeakers): "" or a path inside the app's files folder, where the

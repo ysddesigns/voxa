@@ -127,6 +127,7 @@ export function getNativeEngines(): Engines | null {
         // Yoruba, Igbo and Hausa words get pronunciations from the spelling rules.
         const { overrides, fallbacks } = pronunciationHints(text);
         const rate = options.rate ?? 1;
+        native.setOutput?.(options.output ?? 'room');
         if (packsBuild) native.speak(id, text, speakerId(options.voiceId), rate, overrides, fallbacks, packIdOf(options.voiceId));
         else (native.speak as unknown as (...a: unknown[]) => void)(id, text, speakerId(options.voiceId), rate, overrides, fallbacks);
         return {
