@@ -69,7 +69,8 @@ function rows(r: BenchmarkResult): Row[] {
           ]),
     { label: 'Listen load', value: `${ms(r.asrLoadMs)}${r.asrCold ? '' : ' (already loaded)'}` },
     { label: 'Listen speed (RTF)', value: `${r.asrRtf.toFixed(2)} for ${r.asrAudioSec.toFixed(1)} s`, ok: r.asrRtf <= TARGETS.rtf },
-    { label: 'Heard', value: `“${r.asrText.toLowerCase()}”` },
+    { label: 'Heard', value: `“${r.asrPunctuated ?? r.asrText.toLowerCase()}”` },
+    ...(r.punctMs === undefined ? [] : [{ label: 'Punctuation', value: `${Math.round(r.punctMs)} ms per sentence` }]),
     ...(r.vadRtf === undefined
       ? []
       : [

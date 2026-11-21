@@ -19,6 +19,8 @@
     0-four-speakers-zh.wav   test clip with four speakers, for the speaker-label benchmark
     vits-piper-en_US-amy-low-int8.tar.bz2   Piper voice, benchmark only. Model MIT; the
                                             Amy recordings' licence is unclear, do not ship it.
+    sherpa-onnx-online-punct-en-2024-08-06.tar.bz2   punctuation and capitals for transcripts
+                                            (Edge-Punct-Casing; licence to be checked)
 
   sherpa-onnx 2.x no longer uses espeak-ng (GPL-3.0). Kitten reads words through
   lexicon-en-us.txt instead; the espeak-ng-data folder in the Kitten package is
@@ -47,7 +49,8 @@ $files = @(
   # The release tag really is spelled "recongition".
   @{ Key = 'emb';  Url = "$base/speaker-recongition-models/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx";      Name = '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx' },
   @{ Key = 'diarwav'; Url = "$base/speaker-segmentation-models/0-four-speakers-zh.wav";                               Name = '0-four-speakers-zh.wav' },
-  @{ Key = 'piper'; Url = "$base/tts-models/vits-piper-en_US-amy-low-int8.tar.bz2";                              Name = 'vits-piper-en_US-amy-low-int8.tar.bz2' }
+  @{ Key = 'piper'; Url = "$base/tts-models/vits-piper-en_US-amy-low-int8.tar.bz2";                              Name = 'vits-piper-en_US-amy-low-int8.tar.bz2' },
+  @{ Key = 'punct'; Url = "$base/punctuation-models/sherpa-onnx-online-punct-en-2024-08-06.tar.bz2";                Name = 'sherpa-onnx-online-punct-en-2024-08-06.tar.bz2' }
 )
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
@@ -136,6 +139,12 @@ $piperDst = Fresh (Join-Path $assets 'piper')
 $piperModel = Get-ChildItem $piper.FullName -Filter '*.onnx' | Select-Object -First 1
 Copy-Item $piperModel.FullName (Join-Path $piperDst 'model.onnx')
 Copy-Item (Join-Path $piper.FullName 'tokens.txt') $piperDst
+
+Step 'Installing the punctuation model (int8 only)'
+$punct = Get-ChildItem (Unpack 'punct' 'sherpa-onnx-online-punct-en-2024-08-06.tar.bz2') -Directory | Select-Object -First 1
+$punctDst = Fresh (Join-Path $assets 'punct')
+Copy-Item (Join-Path $punct.FullName 'model.int8.onnx') (Join-Path $punctDst 'model.onnx')
+Copy-Item (Join-Path $punct.FullName 'bpe.vocab') $punctDst
 
 Step 'Done'
 Get-ChildItem $assets -Directory | ForEach-Object {

@@ -7,6 +7,11 @@ describe('native engine helpers', () => {
     expect(tidyTranscript('')).toBe('');
   });
 
+  it('keeps sentences the punctuation model already cased', () => {
+    expect(tidyTranscript('The yellow lamps would light up here and there.')).toBe('The yellow lamps would light up here and there.');
+    expect(tidyTranscript('Is Chinedu in Lagos, or Abuja?')).toBe('Is Chinedu in Lagos, or Abuja?');
+  });
+
   it('maps voice ids to Kitten speaker ids', () => {
     expect(speakerId('kitten-0')).toBe(0);
     expect(speakerId('kitten-5')).toBe(5);

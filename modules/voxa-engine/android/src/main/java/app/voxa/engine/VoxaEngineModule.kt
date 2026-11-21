@@ -26,6 +26,9 @@ import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
+import com.k2fsa.sherpa.onnx.OnlinePunctuation
+import com.k2fsa.sherpa.onnx.OnlinePunctuationConfig
+import com.k2fsa.sherpa.onnx.OnlinePunctuationModelConfig
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
@@ -72,7 +75,9 @@ private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
  *    with AudioTrack. Text becomes voice tokens in KittenTokenizer: English words from the lexicon,
  *    other words from pronunciations the app passes in (Nigerian spelling rules). Word events are
  *    estimated from each piece's audio length, weighted by word length.
- *  - listen: streaming Zipformer 20M (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input.
+ *  - listen: streaming Zipformer 20M (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input,
+ *    run only while Silero VAD hears speech (GatedRecognizer). Finished sentences get punctuation
+ *    and capitals from a small CNN-BiLSTM model; in-progress text stays as the recognizer wrote it.
  *  - benchmark: load time, real-time factor, first-audio latency and memory, for the voice,
  *    speech recognition, Silero VAD and speaker labels (diarization).
  *  - long test: listens for up to 60 minutes with the screen off (ListenService keeps the mic on)
@@ -88,6 +93,8 @@ class VoxaEngineModule : Module() {
   private var ttsLoadMs = 0L
   private var recognizer: OnlineRecognizer? = null
   private var asrLoadMs = 0L
+  private var punct: OnlinePunctuation? = null
+  private var punctTried = false
 
   /** Bumped by every speak/stop; a speaking thread only acts while its number is current. */
   private val speakGen = AtomicInteger(0)
@@ -262,7 +269,39 @@ class VoxaEngineModule : Module() {
     created
   }
 
+  /** Punctuation and capitals for finished sentences, or null when the model is not in this build. */
+  private fun ensurePunct(): OnlinePunctuation? = synchronized(lock) {
+    if (punctTried) return punct
+    punctTried = true
+    if (!assetExists("$MODELS/punct/model.onnx")) return null
+    try {
+      val t0 = SystemClock.elapsedRealtime()
+      punct = OnlinePunctuation(
+        assetManager = context.assets,
+        config = OnlinePunctuationConfig(
+          model = OnlinePunctuationModelConfig(
+            cnnBilstm = "$MODELS/punct/model.onnx",
+            bpeVocab = "$MODELS/punct/bpe.vocab",
+            numThreads = 1,
+            provider = "cpu",
+          ),
+        ),
+      )
+      Log.i(TAG, "punctuation loaded in ${SystemClock.elapsedRealtime() - t0} ms")
+    } catch (e: Throwable) {
+      Log.e(TAG, "punctuation failed to load; transcripts stay unpunctuated", e)
+    }
+    punct
+  }
+
+  /** "THE YELLOW LAMPS WOULD LIGHT UP" → "The yellow lamps would light up." */
+  private fun punctuate(text: String): String {
+    val p = ensurePunct() ?: return text
+    return try { p.addPunctuation(text.lowercase()) } catch (e: Throwable) { Log.e(TAG, "punctuation failed", e); text }
+  }
+
   private fun releaseModels() = synchronized(lock) {
+    punct?.release(); punct = null; punctTried = false
     tts?.release(); tts = null; tokenizer = null
     recognizer?.release(); recognizer = null
   }
@@ -454,8 +493,10 @@ class VoxaEngineModule : Module() {
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
       var segment = 0
       // Times come from the audio itself, so they line up with a recording of the session.
+      ensurePunct()
       val onResult = { res: GatedRecognizer.Result ->
-        emitSegment(segment, res.text, res.startMs, res.endMs, res.final)
+        val text = if (res.final) punctuate(res.text) else res.text
+        emitSegment(segment, text, res.startMs, res.endMs, res.final)
         if (res.final) segment++
       }
       try {
@@ -698,7 +739,13 @@ class VoxaEngineModule : Module() {
     while (r.isReady(stream)) r.decode(stream)
     val asrMs = SystemClock.elapsedRealtime() - t0
     val asrSec = wave.samples.size.toDouble() / wave.sampleRate
-    out["asrText"] = r.getResult(stream).text.trim()
+    val heard = r.getResult(stream).text.trim()
+    out["asrText"] = heard
+    if (ensurePunct() != null) {
+      t0 = SystemClock.elapsedRealtime()
+      out["asrPunctuated"] = punctuate(heard)
+      out["punctMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+    }
     stream.release()
     out["asrAudioSec"] = asrSec
     out["asrMemMb"] = pssMb() - beforeAsr

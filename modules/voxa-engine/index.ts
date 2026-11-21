@@ -29,6 +29,9 @@ export type BenchmarkResult = {
   asrCold: boolean;
   asrLoadMs: number;
   asrText: string;
+  /** asrText after the punctuation model, and how long that took. Builds from 21 Nov 2026. */
+  asrPunctuated?: string;
+  punctMs?: number;
   asrAudioSec: number;
   asrRtf: number;
   /** Silero VAD over the listen clip. Missing in builds made before 21 Nov 2026. */
