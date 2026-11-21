@@ -18,6 +18,12 @@ describe('screen-off test summary', () => {
     expect(s.charged).toBe(false);
     expect(s.done).toBe(true);
     expect(s.reason).toBe('finished');
+    expect(s.speechShare).toBeNull();
+  });
+
+  it('averages how much of each minute the recognizer ran', () => {
+    const s = summarizeLongTest(parseLongTest([row(0, 80, { speechShare: 0 }), row(1, 80, { speechShare: 0.2 }), row(2, 80, { speechShare: 0.6 })]))!;
+    expect(s.speechShare).toBeCloseTo(0.4);
   });
 
   it('scales a stopped test to an hour, but not a very short one', () => {

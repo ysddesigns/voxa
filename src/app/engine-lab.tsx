@@ -36,6 +36,7 @@ function longTestRows(s: LongTestSummary): Row[] {
       ok: s.worstRtf === null ? undefined : s.worstRtf <= TARGETS.rtf,
     },
     { label: 'Words heard', value: String(s.words) },
+    ...(s.speechShare === null ? [] : [{ label: 'Recognizer ran', value: `${Math.round(s.speechShare * 100)}% of the time (silence skipped)` }]),
   ];
 }
 

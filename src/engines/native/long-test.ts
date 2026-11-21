@@ -13,6 +13,8 @@ export type LongTestSummary = {
   avgRtf: number | null;
   worstRtf: number | null;
   words: number;
+  /** Average share of each minute the recognizer ran (VAD skips silence). Null on older builds. */
+  speechShare: number | null;
   /** Charging at any point makes the battery figures meaningless. */
   charged: boolean;
   done: boolean;
@@ -36,6 +38,7 @@ export function summarizeLongTest(samples: LongTestSample[]): LongTestSummary | 
   const first = samples[0];
   const last = samples[samples.length - 1];
   const rtfs = samples.filter((s) => !s.done && s.rtf > 0).map((s) => s.rtf);
+  const shares = samples.filter((s) => !s.done && s.rtf > 0 && s.speechShare !== undefined).map((s) => s.speechShare!);
   const batteryUsed = Math.max(0, first.battery - last.battery);
   return {
     minutes: last.min,
@@ -47,6 +50,7 @@ export function summarizeLongTest(samples: LongTestSample[]): LongTestSummary | 
     avgRtf: rtfs.length ? rtfs.reduce((a, b) => a + b, 0) / rtfs.length : null,
     worstRtf: rtfs.length ? Math.max(...rtfs) : null,
     words: last.words,
+    speechShare: shares.length ? shares.reduce((a, b) => a + b, 0) / shares.length : null,
     charged: samples.some((s) => s.charging),
     done: !!last.done,
     reason: last.reason ?? null,

@@ -449,40 +449,30 @@ class VoxaEngineModule : Module() {
       started.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
       resolved = true
 
-      val stream = r.createStream("")
+      val vad = newVad()
+      val gate = GatedRecognizer(r, vad, ASR_RATE)
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
-      val t0 = SystemClock.elapsedRealtime()
       var segment = 0
-      var segStart = 0L
-      var last = ""
-      while (listening) {
-        val n = rec.read(buf, 0, buf.size)
-        if (n <= 0) continue
-        var sum = 0.0
-        val samples = FloatArray(n) { val v = buf[it] / 32768f; sum += v * v; v }
-        emitListen("level", mapOf("rms" to sqrt(sum / n)))
-        stream.acceptWaveform(samples, ASR_RATE)
-        while (r.isReady(stream)) r.decode(stream)
-        val text = r.getResult(stream).text.trim()
-        val now = SystemClock.elapsedRealtime() - t0
-        if (text != last) {
-          last = text
-          if (text.isNotEmpty()) emitSegment(segment, text, segStart, now, false)
-        }
-        if (r.isEndpoint(stream)) {
-          if (text.isNotEmpty()) { emitSegment(segment, text, segStart, now, true); segment++ }
-          r.reset(stream)
-          last = ""
-          segStart = now
-        }
+      // Times come from the audio itself, so they line up with a recording of the session.
+      val onResult = { res: GatedRecognizer.Result ->
+        emitSegment(segment, res.text, res.startMs, res.endMs, res.final)
+        if (res.final) segment++
       }
-      // Flush what is left as the final segment.
-      stream.acceptWaveform(FloatArray(ASR_RATE / 2), ASR_RATE)
-      stream.inputFinished()
-      while (r.isReady(stream)) r.decode(stream)
-      val text = r.getResult(stream).text.trim()
-      if (text.isNotEmpty()) emitSegment(segment, text, segStart, SystemClock.elapsedRealtime() - t0, true)
-      stream.release()
+      try {
+        while (listening) {
+          val n = rec.read(buf, 0, buf.size)
+          if (n <= 0) continue
+          var sum = 0.0
+          val samples = FloatArray(n) { val v = buf[it] / 32768f; sum += v * v; v }
+          emitListen("level", mapOf("rms" to sqrt(sum / n)))
+          gate.feed(samples, onResult)
+        }
+        gate.finish(onResult)
+        Log.i(TAG, "listened ${gate.heardSamples / ASR_RATE} s, recognizer ran on ${gate.decodedSamples / ASR_RATE} s")
+      } finally {
+        gate.release()
+        vad.release()
+      }
     } catch (e: Throwable) {
       Log.e(TAG, "listen failed", e)
       if (!resolved) started.reject("E_LISTEN", e.message ?: "Could not start listening", e)
@@ -541,43 +531,48 @@ class VoxaEngineModule : Module() {
       rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, max(minBuf, ASR_RATE))
       if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("The microphone is busy")
       rec.startRecording()
-      val stream = r.createStream("")
+      val vad = newVad()
+      val gate = GatedRecognizer(r, vad, ASR_RATE)
+      val countWords: (GatedRecognizer.Result) -> Unit = { res ->
+        if (res.final) words += res.text.split(' ').size
+      }
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
       val endAt = t0 + minutes * 60_000L
       var nextSample = t0 + 60_000L
-      var decodeNs = 0L
-      var audioSamples = 0L
       var lastTick = t0
-      record(mapOf("rtf" to 0.0, "minutes" to minutes))
+      var lastNs = 0L
+      var lastHeard = 0L
+      var lastDecoded = 0L
+      record(mapOf("rtf" to 0.0, "speechShare" to 0.0, "minutes" to minutes))
       try {
         while (listening && SystemClock.elapsedRealtime() < endAt) {
           val n = rec.read(buf, 0, buf.size)
           if (n <= 0) continue
-          val samples = FloatArray(n) { buf[it] / 32768f }
-          val d0 = System.nanoTime()
-          stream.acceptWaveform(samples, ASR_RATE)
-          while (r.isReady(stream)) r.decode(stream)
-          if (r.isEndpoint(stream)) {
-            val text = r.getResult(stream).text.trim()
-            if (text.isNotEmpty()) words += text.split(' ').size
-            r.reset(stream)
-          }
-          decodeNs += System.nanoTime() - d0
-          audioSamples += n
+          gate.feed(FloatArray(n) { buf[it] / 32768f }, countWords)
           val now = SystemClock.elapsedRealtime()
           if (!power.isInteractive) screenOffMs += now - lastTick
           lastTick = now
           if (now >= nextSample) {
-            // Speed over the last minute: decode time / audio time (lower is faster).
-            record(mapOf("rtf" to decodeNs / 1e9 / (audioSamples.toDouble() / ASR_RATE)))
-            decodeNs = 0L
-            audioSamples = 0L
+            val heard = (gate.heardSamples - lastHeard).toDouble()
+            record(
+              mapOf(
+                // Recognizer time / audio time over the last minute, silence included (lower is better).
+                "rtf" to (gate.decodeNs - lastNs) / 1e9 / (heard / ASR_RATE),
+                // Share of the minute the recognizer actually ran (the rest was silence).
+                "speechShare" to (gate.decodedSamples - lastDecoded) / heard,
+              ),
+            )
+            lastNs = gate.decodeNs
+            lastHeard = gate.heardSamples
+            lastDecoded = gate.decodedSamples
             nextSample += 60_000L
           }
         }
+        gate.finish(countWords)
         if (!listening) reason = "stopped"
       } finally {
-        stream.release()
+        gate.release()
+        vad.release()
       }
     } catch (e: Throwable) {
       Log.e(TAG, "long test failed", e)
@@ -601,6 +596,23 @@ class VoxaEngineModule : Module() {
     Debug.getMemoryInfo(m)
     return m.totalPss / 1024.0
   }
+
+  /** Silero VAD for 16 kHz audio. Small (2 MB) and fast, so each listening session makes its own. */
+  private fun newVad() = Vad(
+    assetManager = context.assets,
+    config = VadModelConfig(
+      sileroVadModelConfig = SileroVadModelConfig(
+        model = "$MODELS/vad/silero_vad.onnx",
+        threshold = 0.5f,
+        minSilenceDuration = 0.25f,
+        minSpeechDuration = 0.25f,
+        windowSize = VAD_WINDOW,
+      ),
+      sampleRate = ASR_RATE,
+      numThreads = 1,
+      provider = "cpu",
+    ),
+  )
 
   private fun assetExists(path: String): Boolean =
     try { context.assets.open(path).close(); true } catch (_: Throwable) { false }
@@ -694,21 +706,7 @@ class VoxaEngineModule : Module() {
 
     // Silero VAD (finds where speech starts and stops) over the same clip, in 512-sample windows.
     t0 = SystemClock.elapsedRealtime()
-    val vad = Vad(
-      assetManager = context.assets,
-      config = VadModelConfig(
-        sileroVadModelConfig = SileroVadModelConfig(
-          model = "$MODELS/vad/silero_vad.onnx",
-          threshold = 0.5f,
-          minSilenceDuration = 0.25f,
-          minSpeechDuration = 0.25f,
-          windowSize = VAD_WINDOW,
-        ),
-        sampleRate = ASR_RATE,
-        numThreads = 1,
-        provider = "cpu",
-      ),
-    )
+    val vad = newVad()
     out["vadLoadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
     try {
       t0 = SystemClock.elapsedRealtime()

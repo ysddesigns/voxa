@@ -69,6 +69,8 @@ export type LongTestSample = {
   words: number;
   /** Decode time / audio time over the last minute (0 on the first line). */
   rtf: number;
+  /** Share of the last minute the recognizer ran; the rest was silence skipped by the VAD. */
+  speechShare?: number;
   minutes?: number;
   done?: boolean;
   reason?: string;
