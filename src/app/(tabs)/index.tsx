@@ -4,8 +4,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/icons';
 import { Screen } from '@/components/screen';
 import { Waveform } from '@/components/waveform';
-import { TIER_LABEL } from '@/device/tier';
-import { useDeviceTier } from '@/device/use-device-tier';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -42,7 +40,6 @@ function greeting(d: Date): string {
 export default function Home() {
   const { colors } = useTheme();
   const router = useRouter();
-  const tier = useDeviceTier();
   const recent = useRecent();
   const { prefs, loaded } = usePrefs();
   const now = new Date();
@@ -66,13 +63,6 @@ export default function Home() {
         </Pressable>
       }
     >
-      <View style={[styles.offline, { backgroundColor: colors.card }]}>
-        <Icon name="offline" size={16} color={colors.accentText} />
-        <Text style={[type.caption, { color: colors.textSecondary, flex: 1 }]}>
-          Works offline · {TIER_LABEL[tier]} models on this phone
-        </Text>
-      </View>
-
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Type something to say"
@@ -170,7 +160,6 @@ function Tile({ icon, title, sub, onPress }: { icon: IconName; title: string; su
 
 const styles = StyleSheet.create({
   avatar: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },
-  offline: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 14 },
   hero: { borderRadius: radius.hero, padding: 22, gap: 16 },
   heroWave: { height: 60, justifyContent: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
