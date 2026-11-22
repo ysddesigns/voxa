@@ -44,9 +44,19 @@ export interface DownloadHandle {
   done: Promise<void>;
 }
 
+export interface ExportHandle {
+  cancel(): void;
+  done: Promise<{ durationMs: number; bytes: number }>;
+}
+
 export interface VoiceEngine {
   listVoices(): Promise<Voice[]>;
   speak(text: string, options: SpeakOptions, onEvent?: (e: SpeakEvent) => void): SpeakHandle;
+  /**
+   * Renders speech to an .m4a file. dest: a path in Voxa's folder ("exports/x.m4a"). onProgress gets
+   * 0..1. Missing on engines that cannot export (the mock, older builds).
+   */
+  exportAudio?(text: string, options: SpeakOptions, dest: string, onProgress?: (fraction: number) => void): ExportHandle;
   /** Downloads and installs a voice pack. onProgress gets 0..1. */
   downloadVoice(id: string, onProgress?: (fraction: number) => void): DownloadHandle;
 }

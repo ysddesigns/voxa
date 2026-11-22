@@ -1,4 +1,6 @@
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -22,6 +24,41 @@ export default function Player() {
   const voice = byId(s.voiceId);
   const playing = s.status === 'playing';
   const remaining = Math.max(0, s.durationMs - s.positionMs);
+  const [exporting, setExporting] = useState<number | null>(null);
+  const [exportNote, setExportNote] = useState<string | null>(null);
+  const cancelExport = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelExport.current?.(), []);
+
+  const shareAudio = async () => {
+    if (s.status === 'playing') s.pause();
+    setExportNote(null);
+    setExporting(0);
+    const job = s.startExport((f) => setExporting(f));
+    cancelExport.current = job.cancel;
+    try {
+      const uri = await job.done;
+      setExporting(null);
+      if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this phone');
+      await Sharing.shareAsync(uri, { mimeType: 'audio/mp4', dialogTitle: 'Share audio' });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message !== 'Cancelled') setExportNote(`Could not make the audio file: ${message}`);
+    } finally {
+      cancelExport.current = null;
+      setExporting(null);
+    }
+  };
+  const share = () => {
+    if (!s.canExport) {
+      void Share.share({ message: s.text });
+      return;
+    }
+    Alert.alert('Share', 'Share the speech as an audio file, or the words as text.', [
+      { text: 'Audio file (M4A)', onPress: () => void shareAudio() },
+      { text: 'Text', onPress: () => void Share.share({ message: s.text }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
@@ -89,15 +126,28 @@ export default function Player() {
           </Pressable>
           <RoundButton icon="forward15" label="Forward 15 seconds" onPress={() => s.skip(15)} />
           <Pressable
-            onPress={() => Share.share({ message: s.text })}
-            disabled={!s.words.length}
+            onPress={share}
+            disabled={!s.words.length || exporting !== null}
             accessibilityRole="button"
-            accessibilityLabel="Share text"
+            accessibilityLabel={s.canExport ? 'Share audio or text' : 'Share text'}
             style={[styles.pill, { backgroundColor: colors.card }]}
           >
             <Icon name="share" size={20} color={colors.text} />
           </Pressable>
         </View>
+
+        {exporting !== null ? (
+          <View style={[styles.exportRow, { backgroundColor: colors.card }]} accessibilityLiveRegion="polite">
+            <Text style={[type.callout, { color: colors.text, flex: 1 }]}>Making the audio file… {Math.round(exporting * 100)}%</Text>
+            <Pressable onPress={() => cancelExport.current?.()} accessibilityRole="button" style={styles.cancel}>
+              <Text style={[type.callout, { color: colors.accentText }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : exportNote ? (
+          <Text style={[type.callout, { color: colors.accentText }]} accessibilityLiveRegion="polite">
+            {exportNote}
+          </Text>
+        ) : null}
 
         <View style={styles.chips}>
           <Chip icon="speaker" text="Phone speaker" />
@@ -161,5 +211,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
   },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  exportRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.card, paddingLeft: 16, paddingRight: 4, minHeight: minTouch + 8 },
+  cancel: { minHeight: minTouch, justifyContent: 'center', paddingHorizontal: 12 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.pill },
 });

@@ -70,6 +70,8 @@ private const val MODELS = "voxa-models"
 private const val ASR_RATE = 16000
 /** Longer sentences are spoken in pieces, like sherpa-onnx's max_words_in_sentence. */
 private const val MAX_WORDS = 20
+/** Longest PDF read into the editor; ML Kit takes about a second a page on a budget phone. */
+private const val MAX_PDF_PAGES = 30
 /** The voice is the slowest model; give it up to 4 cores (2 made Kitten slower than real time on a Redmi Note 13). */
 private val TTS_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 private const val LONG_TEST_FILE = "long-test.jsonl"
@@ -125,6 +127,8 @@ class VoxaEngineModule : Module() {
   private val packs by lazy { PackStore(context) }
   private val recorder by lazy { VoiceRecorder { rms -> sendEvent("onRecord", mapOf("rms" to rms)) } }
   private val scanner by lazy { TextScanner(context) }
+  private val documents by lazy { DocumentReader(context, scanner) }
+  @Volatile private var exportCancelled = false
   /** Pack id → cancel requested, for installs in progress. */
   private val packCancels = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
   private var listenThread: Thread? = null
@@ -144,7 +148,7 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction", "onRecord")
+    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction", "onRecord", "onExport", "onDocument")
 
     // Notification buttons (Pause, Resume, Mark, Stop) go to the app, which does the work and
     // sends the new state back with showListenNotice.
@@ -504,6 +508,55 @@ class VoxaEngineModule : Module() {
     }
 
     // Scan text from an image (file:// or content:// uri). Lines top to bottom.
+    // Export (PRD PL-2): renders the script to an .m4a (AAC) file with the phone's encoder.
+    // options: text, sid, speed, overrides, fallbacks, voice, plan (as speakPlanned), dest (a path
+    // inside the app's files folder). Progress arrives as onExport {fraction}.
+    AsyncFunction("exportSpeech") { options: Map<String, Any?>, promise: Promise ->
+      val dest = appFile(options["dest"] as? String ?: "")
+      val text = options["text"] as? String ?: ""
+      if (dest == null || text.isBlank()) {
+        promise.reject("E_EXPORT", "Nothing to export", null)
+      } else {
+        exportCancelled = false
+        thread(name = "voxa-export") {
+          try {
+            promise.resolve(runExport(text, options, dest))
+          } catch (e: Throwable) {
+            Log.e(TAG, "export failed", e)
+            promise.reject("E_EXPORT", if (exportCancelled) "Cancelled" else (e.message ?: "Could not make the audio file"), e)
+          }
+        }
+      }
+    }
+
+    Function("cancelExport") { exportCancelled = true }
+
+    // Import (PRD ED-1): the text of a .docx or PDF (content:// or file://). PDF pages are read with
+    // ML Kit; progress arrives as onDocument {fraction}.
+    AsyncFunction("readDocument") { uri: String, kind: String, promise: Promise ->
+      documents.cancelled = false
+      thread(name = "voxa-document") {
+        try {
+          val result = when (kind) {
+            "docx" -> mapOf("text" to documents.readDocx(uri), "pages" to 0, "pagesRead" to 0)
+            "pdf" -> {
+              val (text, pages) = documents.readPdf(uri, MAX_PDF_PAGES) { done, total ->
+                sendEvent("onDocument", mapOf("fraction" to done.toDouble() / total))
+              }
+              mapOf("text" to text, "pages" to pages, "pagesRead" to minOf(pages, MAX_PDF_PAGES))
+            }
+            else -> throw IllegalArgumentException("Voxa can open .txt, .docx and PDF files")
+          }
+          promise.resolve(result)
+        } catch (e: Throwable) {
+          Log.e(TAG, "document failed", e)
+          promise.reject("E_DOCUMENT", e.message ?: "Could not read the file", e)
+        }
+      }
+    }
+
+    Function("cancelDocument") { documents.cancelled = true }
+
     AsyncFunction("recognizeText") { uri: String, promise: Promise ->
       thread(name = "voxa-scan") {
         try {
@@ -911,6 +964,53 @@ class VoxaEngineModule : Module() {
       }
     }
     return out
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun runExport(text: String, options: Map<String, Any?>, dest: File): Map<String, Any> {
+    val voice = options["voice"] as? String ?: ""
+    val sid = (options["sid"] as? Number)?.toInt() ?: 0
+    val speed = ((options["speed"] as? Number)?.toFloat() ?: 1f).coerceIn(0.3f, 3f)
+    val overrides = options["overrides"] as? Map<String, String> ?: emptyMap()
+    val fallbacks = options["fallbacks"] as? Map<String, String> ?: emptyMap()
+    val plan = (options["plan"] as? List<Map<String, Any?>>)?.map { m ->
+      fun n(k: String, d: Double = 0.0) = (m[k] as? Number)?.toDouble() ?: d
+      Piece(
+        n("start").toInt().coerceIn(0, text.length),
+        n("end").toInt().coerceIn(0, text.length),
+        n("speed", 1.0).toFloat().coerceIn(0.3f, 3f),
+        n("gain", 1.0).toFloat().coerceIn(0f, 2f),
+        n("pauseMs").toInt().coerceIn(0, 10_000),
+        n("gapMs").toInt().coerceIn(0, 3_000),
+      )
+    }
+    val engine = ensureTts(voice)
+    val rate = engine.sampleRate()
+    val sentences = if (plan != null) plannedSentences(text, plan) else splitSentences(text)
+    val tmp = File(dest.path + ".part")
+    val writer = AacWriter(tmp, rate)
+    try {
+      // A short lead-in so players do not clip the first word.
+      writer.writeSilence(rate / 5)
+      sentences.forEachIndexed { i, s ->
+        if (exportCancelled) throw InterruptedException("Cancelled")
+        val audio = if (s.text.isBlank()) null else synth(engine, s.text, sid, speed * s.speed, overrides, fallbacks, alive = { !exportCancelled })
+        val samples = audio?.samples ?: FloatArray(0)
+        if (s.gain != 1f) for (k in samples.indices) samples[k] *= s.gain
+        writer.write(samples)
+        writer.writeSilence((s.pauseMs.toLong() * rate / 1000).toInt())
+        sendEvent("onExport", mapOf("fraction" to (i + 1).toDouble() / sentences.size))
+      }
+      if (exportCancelled) throw InterruptedException("Cancelled")
+      writer.writeSilence(rate / 5)
+      val ms = writer.finish()
+      if (dest.exists()) dest.delete()
+      check(tmp.renameTo(dest)) { "Could not save the audio file" }
+      return mapOf("durationMs" to ms.toDouble(), "bytes" to dest.length().toDouble())
+    } catch (e: Throwable) {
+      writer.abort()
+      throw e
+    }
   }
 
   private fun runSpeak(

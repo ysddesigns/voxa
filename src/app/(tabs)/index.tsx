@@ -88,8 +88,10 @@ export default function Home() {
             <Pressable
               key={label}
               accessibilityRole="button"
-              accessibilityLabel={label === 'Scan' ? 'Scan text with the camera' : label}
-              onPress={() => router.push(label === 'Scan' ? '/scan' : '/editor')}
+              accessibilityLabel={label === 'Scan' ? 'Scan text with the camera' : label === 'Files' ? 'Open a text, Word or PDF file' : label}
+              onPress={() =>
+                label === 'Scan' ? router.push('/scan') : label === 'Files' ? router.push({ pathname: '/editor', params: { open: 'file' } }) : router.push('/editor')
+              }
               style={[styles.heroChip, { backgroundColor: 'rgba(255,255,255,0.22)' }]}
             >
               <Text style={[type.callout, { color: colors.onAccent }]}>{label}</Text>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
@@ -10,6 +10,7 @@ import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { durationMs, formatSpeed, formatTime } from '@/features/speak/playback';
 import { useSpeakSession } from '@/features/speak/speak-session';
+import { openDocument } from '@/features/speak/open-document';
 import { insertPause, sayAsKey, sayAsWordAt, STYLE_LABEL, toggleEmphasis, type Selection } from '@/features/speak/script';
 import { useVoices } from '@/features/voices/voices-store';
 
@@ -21,7 +22,7 @@ export default function Editor() {
   const s = useSpeakSession();
   const { byId } = useVoices();
   // voxa://editor?text=... opens the editor with that text (deep links, share-to-Voxa later).
-  const { text: incoming } = useLocalSearchParams<{ text?: string }>();
+  const { text: incoming, open } = useLocalSearchParams<{ text?: string; open?: string }>();
   const { setText } = s;
   const applied = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -49,6 +50,41 @@ export default function Editor() {
     setSel(edit.selection);
     setForcedSel(edit.selection);
   };
+  const [reading, setReading] = useState<number | null>(null);
+  const openFile = async () => {
+    setHint(null);
+    setReading(0);
+    try {
+      const doc = await openDocument((f) => setReading(f));
+      if (!doc) return;
+      const put = (t: string) => {
+        s.setText(t);
+        setForcedSel({ start: t.length, end: t.length });
+        setHint(doc.note);
+      };
+      if (!s.text.trim()) put(doc.text);
+      else
+        Alert.alert(`Add “${doc.name}”?`, 'Replace the script, or add the file to the end?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add to end', onPress: () => put(`${s.text.trimEnd()}\n\n${doc.text}`) },
+          { text: 'Replace', style: 'destructive', onPress: () => put(doc.text) },
+        ]);
+    } catch (e) {
+      setHint(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReading(null);
+    }
+  };
+  // voxa://editor?open=file (the Home screen's Files button) opens the file picker once.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (open !== 'file' || opened.current) return;
+    opened.current = true;
+    const t = setTimeout(() => void openFile(), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const openSayAs = () => {
     const word = sayAsWordAt(s.text, sel);
     if (!word) setHint('Tap a word in the script first, then Say as.');
@@ -117,6 +153,7 @@ export default function Editor() {
         {!showingPlayback ? (
           <View style={{ gap: 6 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tools}>
+              <Tool icon="library" label={reading !== null ? 'Reading…' : 'Open file'} hint="Adds text from a .txt, Word or PDF file" onPress={() => void openFile()} />
               <Tool
                 icon="pause"
                 label="Pause"
@@ -134,7 +171,9 @@ export default function Editor() {
               <Tool icon="wave" label={`Style: ${STYLE_LABEL[s.style]}`} hint="Changes the reading style: Neutral, Warm, Upbeat or Slow" onPress={s.cycleStyle} />
             </ScrollView>
             <Text style={[type.caption, { color: hint ? colors.accentText : colors.textTertiary, paddingHorizontal: 4 }]} accessibilityLiveRegion="polite">
-              {hint || 'Write *word* to stress it, and [pause] for a pause.'}
+              {reading !== null && reading > 0
+                ? `Reading the PDF… ${Math.round(reading * 100)}%`
+                : hint || 'Write *word* to stress it, and [pause] for a pause.'}
             </Text>
           </View>
         ) : null}

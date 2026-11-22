@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useEngines } from '@/engines/provider';
-import type { SpeakHandle } from '@/engines/types';
+import type { ExportHandle, SpeakHandle } from '@/engines/types';
 import { usePrefs } from '@/features/settings/prefs';
 import { useVoices } from '@/features/voices/voices-store';
 import {
@@ -13,7 +13,10 @@ import {
   wordsForSeconds,
   type Word,
 } from './playback';
+import { File, Paths } from 'expo-file-system';
 import { sayAsStore } from '@/storage';
+import { deviceFiles } from '@/storage/device-files';
+import { exportName } from './export-import';
 import { parseScript, planFrom, scriptWords, styleSpeed, STYLES, type SayAs, type Style } from './script';
 
 /**
@@ -61,6 +64,10 @@ type SpeakValue = {
   setSayAs: (word: string, sound: string) => Promise<void>;
   /** Speaks a word as the dictionary entry would, for trying a "Say as" sound. */
   trySound: (sound: string) => void;
+  /** The voice engine can save the script as an audio file (PRD PL-2). */
+  canExport: boolean;
+  /** Saves the whole script as an .m4a; done resolves with the file's uri. Replaces the last export. */
+  startExport: (onProgress: (fraction: number) => void) => { cancel: () => void; done: Promise<string> };
 };
 
 const SpeakContext = createContext<SpeakValue | null>(null);
@@ -241,6 +248,32 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     [status, stop],
   );
 
+  const startExport = useCallback(
+    (onProgress: (fraction: number) => void) => {
+      const plan = planFrom(parsed, 0);
+      const name = exportName(makeTitle(text));
+      let handle: ExportHandle | null = null;
+      let cancelled = false;
+      const done = (async () => {
+        if (!engine.exportAudio) throw new Error('This version of Voxa cannot save audio files');
+        // Only the newest export is kept, so old files do not fill the phone.
+        await deviceFiles.remove('exports');
+        if (cancelled) throw new Error('Cancelled');
+        handle = engine.exportAudio(plan.spoken, { voiceId: effectiveVoice, rate, pieces: plan.pieces }, `exports/${name}`, onProgress);
+        await handle.done;
+        return new File(Paths.document, 'voxa', 'exports', name).uri;
+      })();
+      return {
+        cancel: () => {
+          cancelled = true;
+          handle?.cancel();
+        },
+        done,
+      };
+    },
+    [engine, parsed, text, effectiveVoice, rate],
+  );
+
   const cycleStyle = useCallback(() => {
     if (status !== 'idle') stop();
     setStyle((s) => STYLES[(STYLES.indexOf(s) + 1) % STYLES.length]);
@@ -278,6 +311,8 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     sayAs,
     setSayAs,
     trySound,
+    canExport: !!engine.exportAudio,
+    startExport,
   };
 
   return <SpeakContext.Provider value={value}>{children}</SpeakContext.Provider>;

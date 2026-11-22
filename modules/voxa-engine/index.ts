@@ -199,8 +199,27 @@ type VoxaEngineNative = {
   stopRecording?(): Promise<{ durationMs: number }>;
   /** Zips a folder inside the app's files folder into `dest`. Builds from 23 Nov 2026. */
   zipFolder?(src: string, dest: string): Promise<{ bytes: number }>;
+  /**
+   * Renders speech to an .m4a (AAC) file at dest (inside the app's files folder) with the phone's
+   * encoder. plan as in speakPlanned. Progress arrives as onExport. Builds from 23 Nov 2026.
+   */
+  exportSpeech?(options: {
+    text: string;
+    sid: number;
+    speed: number;
+    overrides: Record<string, string>;
+    fallbacks: Record<string, string>;
+    voice: string;
+    plan?: { start: number; end: number; speed: number; gain: number; pauseMs: number; gapMs: number }[];
+    dest: string;
+  }): Promise<{ durationMs: number; bytes: number }>;
+  cancelExport?(): void;
+  /** Text of a .docx or PDF (PDF pages read with ML Kit, at most 30). Progress as onDocument. Builds from 23 Nov 2026. */
+  readDocument?(uri: string, kind: 'docx' | 'pdf'): Promise<{ text: string; pages: number; pagesRead: number }>;
+  cancelDocument?(): void;
   release(): void;
   addListener(event: 'onRecord', listener: (e: { rms: number }) => void): EventSubscription;
+  addListener(event: 'onExport' | 'onDocument', listener: (e: { fraction: number }) => void): EventSubscription;
   addListener(event: 'onLabel', listener: (e: { fraction: number }) => void): EventSubscription;
   addListener(event: 'onPack', listener: (e: NativePackEvent) => void): EventSubscription;
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;

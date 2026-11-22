@@ -44,6 +44,12 @@ class TextScanner(private val context: Context) {
     return out
   }
 
+  /** Blocking: the text of a rendered page, paragraphs separated by blank lines. */
+  fun recognizeBitmap(bitmap: android.graphics.Bitmap): String {
+    val text = Tasks.await(get().process(InputImage.fromBitmap(bitmap, 0)))
+    return text.textBlocks.joinToString("\n\n") { block -> block.lines.joinToString(" ") { it.text } }
+  }
+
   @Synchronized
   fun release() {
     recognizer?.close()

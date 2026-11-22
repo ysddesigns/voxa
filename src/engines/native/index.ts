@@ -4,7 +4,7 @@ import { packBytes, type Pack } from '@/features/packs/catalogue';
 import { catalogueVoices, packService } from '@/features/packs/packs';
 import { verdictMessage } from '@/features/packs/rules';
 import { createMockEngines } from '../mock';
-import type { Engines, ListenEvent, ListenOptions, SpeakEvent, SpeakHandle, Voice } from '../types';
+import type { Engines, ExportHandle, ListenEvent, ListenOptions, SpeakEvent, SpeakHandle, SpeakOptions, Voice } from '../types';
 import { nativeLabelSpeakers, startNativeListen } from './listen';
 
 /**
@@ -90,6 +90,26 @@ export function getNativeEngines(): Engines | null {
         if (!verdict.ok) return { cancel() {}, done: Promise.reject(new Error(verdictMessage(verdict) ?? 'Cannot download now')) };
         return packService.install(pack, onProgress);
       },
+
+      ...(native.exportSpeech
+        ? {
+            exportAudio(text: string, options: SpeakOptions, dest: string, onProgress?: (fraction: number) => void): ExportHandle {
+              const { overrides, fallbacks } = pronunciationHints(text);
+              const sub = native.addListener('onExport', (e) => onProgress?.(e.fraction));
+              const done = native.exportSpeech!({
+                text,
+                sid: speakerId(options.voiceId),
+                speed: options.rate ?? 1,
+                overrides,
+                fallbacks,
+                voice: packIdOf(options.voiceId),
+                plan: options.pieces,
+                dest: `voxa/${dest}`,
+              }).finally(() => sub.remove());
+              return { cancel: () => native.cancelExport?.(), done };
+            },
+          }
+        : {}),
 
       speak(text, options, onEvent?: (e: SpeakEvent) => void): SpeakHandle {
         const id = nextId++;
