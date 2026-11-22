@@ -1,0 +1,15 @@
+{
+  "_comment": "Text clean-up cases shared by the app scorer (src/features/asr-compare/compare.ts words()) and the training scripts (voxa_asr/normalize.py). Both test suites read this file, so the two cannot drift apart.",
+  "cases": [
+    { "text": "Good morning, everyone. I’m Yusuf!", "words": ["good", "morning", "everyone", "i'm", "yusuf"] },
+    { "text": "follow-up", "words": ["follow", "up"] },
+    { "text": "  ... ", "words": [] },
+    { "text": "Ẹ káàárọ̀ gbogbo yín", "words": ["e", "kaaaro", "gbogbo", "yin"] },
+    { "text": "ɗari ƙarfe", "words": ["dari", "karfe"] },
+    { "text": "n’izu", "words": ["n'izu"] },
+    { "text": "GOOD MORNING EVERYONE", "words": ["good", "morning", "everyone"] },
+    { "text": "'quoted' words", "words": ["quoted", "words"] },
+    { "text": "Ụtụtụ ọma unu niile", "words": ["ututu", "oma", "unu", "niile"] },
+    { "text": "three hundred, 300", "words": ["three", "hundred", "300"] }
+  ]
+}

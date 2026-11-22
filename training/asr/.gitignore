@@ -1,0 +1,11 @@
+# Large or machine-specific outputs. splits/speakers.json is NOT ignored: commit the lock.
+icefall/
+base/
+models/
+data/
+exp/
+packs/
+reports/
+env.sh
+__pycache__/
+.pytest_cache/
