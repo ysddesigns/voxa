@@ -18,16 +18,16 @@ export function Screen({ title, overline, right, children }: {
       style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{
         paddingTop: insets.top + 12,
-        paddingHorizontal: 20,
+        paddingHorizontal: 16,
         // Android tab bar floats over content; iOS native tabs inset automatically.
         paddingBottom: Platform.OS === 'ios' ? 32 : insets.bottom + 112,
-        gap: 16,
+        gap: 24,
       }}
       contentInsetAdjustmentBehavior="automatic"
     >
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          {overline ? <Text style={[type.overline, { color: colors.textTertiary }]}>{overline}</Text> : null}
+          {overline ? <Text style={[type.overline, { color: colors.textSecondary }]}>{overline}</Text> : null}
           <Text style={[type.largeTitle, { color: colors.text }]} accessibilityRole="header">
             {title}
           </Text>
@@ -49,6 +49,6 @@ export function Placeholder({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 4, marginBottom: -8 },
   card: { borderRadius: 20, borderCurve: 'continuous', padding: 20 },
 });

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Icon } from '@/components/icons';
 import { Screen } from '@/components/screen';
+import { Button, Card, Group, ListRow, SearchField } from '@/components/ui';
 import { useTheme } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
@@ -39,63 +38,34 @@ export default function LibraryScreen() {
 
   return (
     <Screen title="Library">
-      <View style={[styles.search, { backgroundColor: colors.card }]}>
-        <Icon name="search" size={18} color={colors.textTertiary} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search titles"
-          placeholderTextColor={colors.textTertiary}
-          accessibilityLabel="Search saved sessions"
-          style={[type.body, { color: colors.text, flex: 1, paddingVertical: 10 }]}
-        />
-      </View>
+      <SearchField value={query} onChangeText={setQuery} placeholder="Search" label="Search saved sessions" />
 
       {l.status !== 'idle' ? (
-        <Pressable onPress={() => router.navigate('/live')} accessibilityRole="button" style={[styles.live, { backgroundColor: colors.warning }]}>
-          <Icon name="mic" size={18} color={colors.accentText} />
-          <Text style={[type.bodyStrong, { color: colors.accentText, flex: 1 }]}>{l.status === 'paused' ? 'Listening paused' : 'Listening now'}</Text>
-          <Icon name="arrow" size={18} color={colors.accentText} />
-        </Pressable>
+        <Group>
+          <ListRow icon="mic" tint title={l.status === 'paused' ? 'Listening paused' : 'Listening now'} subtitle={l.title} onPress={() => router.navigate('/live')} />
+        </Group>
       ) : null}
 
       {sessions === null ? null : shown.length === 0 ? (
-        <View style={[styles.empty, { backgroundColor: colors.card }]}>
-          <Text style={[type.bodyStrong, { color: colors.text }]}>{query ? 'Nothing matches' : 'Nothing saved yet'}</Text>
-          <Text style={[type.body, { color: colors.textSecondary }]}>
+        <Card style={{ gap: 8 }}>
+          <Text style={[type.headline, { color: colors.text }]}>{query ? 'Nothing Matches' : 'Nothing Saved Yet'}</Text>
+          <Text style={[type.subheadline, { color: colors.textSecondary }]}>
             {query ? 'Try another word.' : 'Meetings you listen to and text you scan are saved here, on this phone only.'}
           </Text>
-          {query ? null : (
-            <Pressable onPress={() => router.navigate('/live')} accessibilityRole="button" style={[styles.pill, { backgroundColor: colors.primaryFill }]}>
-              <Text style={[type.callout, { color: colors.onPrimary }]}>Start listening</Text>
-            </Pressable>
-          )}
-        </View>
+          {query ? null : <Button label="Start Listening" icon="mic" onPress={() => router.navigate('/live')} style={{ alignSelf: 'flex-start', marginTop: 4 }} />}
+        </Card>
       ) : (
-        <View style={[styles.list, { backgroundColor: colors.card }]}>
-          {shown.map((s, i) => (
-            <Pressable
+        <Group header={query ? `${shown.length} found` : undefined}>
+          {shown.map((s) => (
+            <ListRow
               key={s.id}
-              accessibilityRole="button"
+              icon={s.kind === 'scan' ? 'scan' : 'live'}
+              title={s.title}
+              subtitle={metaLine(s)}
               onPress={() => router.push({ pathname: '/session/[id]', params: { id: s.id } })}
-              style={({ pressed }) => [
-                styles.row,
-                i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-                pressed && { opacity: 0.6 },
-              ]}
-            >
-              <View style={[styles.rowIcon, { backgroundColor: colors.warning }]}>
-                <Icon name={s.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={2}>
-                  {s.title}
-                </Text>
-                <Text style={[type.caption, { color: colors.textTertiary }]}>{metaLine(s)}</Text>
-              </View>
-            </Pressable>
+            />
           ))}
-        </View>
+        </Group>
       )}
     </Screen>
   );
@@ -110,12 +80,3 @@ function metaLine(s: SessionMeta): string {
   return parts.join(' · ');
 }
 
-const styles = StyleSheet.create({
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.pill, paddingHorizontal: 14 },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.card, padding: 14 },
-  empty: { borderRadius: radius.card, padding: 20, gap: 8 },
-  pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
-  list: { borderRadius: radius.card, paddingHorizontal: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, minHeight: minTouch },
-  rowIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-});

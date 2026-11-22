@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/icons';
 import { Screen } from '@/components/screen';
+import { Card, Group, SearchField } from '@/components/ui';
 import { DownloadRing, VoiceAvatar } from '@/components/voice-avatar';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
@@ -27,27 +28,16 @@ export default function VoicesScreen() {
     <Screen
       title="Voices"
       right={
-        <View style={[styles.storage, { backgroundColor: colors.card }]}>
-          <Text style={[type.caption, { color: colors.text, fontFamily: type.bodyStrong.fontFamily }]}>
+        <View style={[styles.storage, { backgroundColor: colors.chip }]}>
+          <Text style={[type.footnote, { color: colors.text }]}>
             {usedMB} MB on phone
           </Text>
         </View>
       }
     >
-      <View style={[styles.search, { backgroundColor: colors.chip }]}>
-        <Icon name="search" size={18} color={colors.textSecondary} />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search voices, accents, tones"
-          placeholderTextColor={colors.textTertiary}
-          accessibilityLabel="Search voices"
-          returnKeyType="search"
-          style={[type.body, styles.searchInput, { color: colors.text }]}
-        />
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      <View style={{ gap: 12 }}>
+        <SearchField value={query} onChangeText={setQuery} placeholder="Search voices, accents, tones" label="Search voices" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} style={{ marginHorizontal: -16 }}>
         {VOICE_FILTERS.map((f) => {
           const on = f === filter;
           return (
@@ -56,44 +46,48 @@ export default function VoicesScreen() {
               onPress={() => setFilter(f)}
               accessibilityRole="button"
               accessibilityState={{ selected: on }}
-              style={[styles.filter, { backgroundColor: on ? colors.primaryFill : colors.card }]}
+              style={[styles.filter, { backgroundColor: on ? colors.primaryFill : colors.chip }]}
             >
-              <Text style={[type.callout, { color: on ? colors.onPrimary : colors.text, fontFamily: type.bodyStrong.fontFamily }]}>
+              <Text style={[type.subheadline, { color: on ? colors.onPrimary : colors.text, fontFamily: on ? type.headline.fontFamily : type.subheadline.fontFamily }]}>
                 {f}
               </Text>
             </Pressable>
           );
         })}
-      </ScrollView>
+        </ScrollView>
+      </View>
 
-      {installed.length > 0 && <SectionTitle>On this phone</SectionTitle>}
-      {def && <DefaultVoiceCard voice={def} />}
-      {others.length > 0 && (
-        <View style={[styles.group, { backgroundColor: colors.card }]}>
-          {others.map((v, i) => (
-            <InstalledRow key={v.id} voice={v} first={i === 0} />
-          ))}
+      {installed.length > 0 && (
+        <View style={{ gap: 7 }}>
+          <SectionTitle>On this phone</SectionTitle>
+          {def && <DefaultVoiceCard voice={def} />}
+          {others.length > 0 && (
+            <Group>
+              {others.map((v) => (
+                <InstalledRow key={v.id} voice={v} />
+              ))}
+            </Group>
+          )}
         </View>
       )}
 
-      {more.length > 0 && <SectionTitle>Get more voices</SectionTitle>}
       {more.length > 0 && (
-        <View style={[styles.group, { backgroundColor: colors.card }]}>
-          {more.map((v, i) => {
+        <Group header="Get more voices">
+          {more.map((v) => {
             const p = downloads[v.id];
             const busy = p !== undefined;
             return (
-              <View key={v.id} style={[styles.row, i > 0 && sep(colors.separator)]}>
+              <View key={v.id} style={styles.row}>
                 <VoiceAvatar name={v.name} size={40} solid={false} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[type.bodyStrong, { color: colors.text }]}>{v.name}</Text>
-                  <Text style={[type.caption, { color: colors.textTertiary }]}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[type.body, { color: colors.text }]}>{v.name}</Text>
+                  <Text style={[type.footnote, { color: colors.textSecondary }]}>
                     {busy
                       ? `${v.tags.join(' · ')} · ${Math.round(p * v.sizeMB)} of ${v.sizeMB} MB`
                       : voiceSubtitle(v, true)}
                   </Text>
                   {!busy && downloadErrors[v.id] && (
-                    <Text style={[type.caption, { color: colors.warning }]}>{downloadErrors[v.id]}</Text>
+                    <Text style={[type.footnote, { color: colors.accentText }]}>{downloadErrors[v.id]}</Text>
                   )}
                 </View>
                 <Pressable
@@ -107,7 +101,7 @@ export default function VoicesScreen() {
               </View>
             );
           })}
-        </View>
+        </Group>
       )}
 
       {shown.length === 0 && (
@@ -122,7 +116,7 @@ export default function VoicesScreen() {
 function SectionTitle({ children }: { children: string }) {
   const { colors } = useTheme();
   return (
-    <Text style={[type.overline, { color: colors.textSecondary, marginTop: 6, marginLeft: 2 }]} accessibilityRole="header">
+    <Text style={[type.overline, { color: colors.textSecondary, paddingHorizontal: 16 }]} accessibilityRole="header">
       {children}
     </Text>
   );
@@ -134,7 +128,7 @@ function DefaultVoiceCard({ voice }: { voice: Voice }) {
   const playing = previewingId === voice.id;
   const fav = favourites.has(voice.id);
   return (
-    <View style={[styles.card, { backgroundColor: colors.card }]}>
+    <Card style={{ padding: 14, gap: 10 }}>
       <View style={styles.cardTop}>
         <Pressable
           onPress={() => togglePreview(voice.id)}
@@ -146,7 +140,7 @@ function DefaultVoiceCard({ voice }: { voice: Voice }) {
         </Pressable>
         <View style={{ flex: 1, gap: 5 }}>
           <View style={styles.nameRow}>
-            <Text style={[type.bodyStrong, { color: colors.text, fontSize: 17 }]}>{voice.name}</Text>
+            <Text style={[type.headline, { color: colors.text }]}>{voice.name}</Text>
             <View style={[styles.badge, { backgroundColor: colors.primaryFill }]}>
               <Text style={[type.tab, { color: colors.onPrimary }]}>Default</Text>
             </View>
@@ -162,16 +156,16 @@ function DefaultVoiceCard({ voice }: { voice: Voice }) {
         <FavouriteButton id={voice.id} name={voice.name} on={fav} onToggle={toggleFavourite} />
       </View>
       {playing && <Waveform bars={48} maxHeight={30} minHeight={4} barWidth={2.5} gap={2.5} color={colors.accent} breathe seed={0.6} />}
-    </View>
+    </Card>
   );
 }
 
-function InstalledRow({ voice, first }: { voice: Voice; first: boolean }) {
+function InstalledRow({ voice }: { voice: Voice }) {
   const { colors } = useTheme();
   const { previewingId, togglePreview, favourites, toggleFavourite, setDefault } = useVoices();
   const playing = previewingId === voice.id;
   return (
-    <View style={[styles.row, !first && sep(colors.separator)]}>
+    <View style={styles.row}>
       <Pressable
         onPress={() => togglePreview(voice.id)}
         accessibilityRole="button"
@@ -187,8 +181,8 @@ function InstalledRow({ voice, first }: { voice: Voice; first: boolean }) {
         accessibilityLabel={`${voice.name}, ${voiceSubtitle(voice)}`}
         accessibilityHint="Makes this your default voice"
       >
-        <Text style={[type.bodyStrong, { color: colors.text }]}>{voice.name}</Text>
-        <Text style={[type.caption, { color: colors.textTertiary }]}>{voiceSubtitle(voice)}</Text>
+        <Text style={[type.body, { color: colors.text }]}>{voice.name}</Text>
+        <Text style={[type.footnote, { color: colors.textSecondary }]}>{voiceSubtitle(voice)}</Text>
       </Pressable>
       <FavouriteButton id={voice.id} name={voice.name} on={favourites.has(voice.id)} onToggle={toggleFavourite} />
     </View>
@@ -210,15 +204,10 @@ function FavouriteButton({ id, name, on, onToggle }: { id: string; name: string;
   );
 }
 
-const sep = (color: string) => ({ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color });
-
 const styles = StyleSheet.create({
   storage: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.pill, marginBottom: 6 },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, borderCurve: 'continuous' },
-  searchInput: { flex: 1, paddingVertical: 0 },
-  filters: { gap: 8 },
-  filter: { minHeight: 44, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
-  card: { borderRadius: radius.card, padding: 14, gap: 10 },
+  filters: { gap: 8, paddingHorizontal: 16 },
+  filter: { minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bigPlay: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   smallPlay: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
@@ -226,7 +215,6 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 },
   tags: { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
-  group: { borderRadius: radius.card, paddingHorizontal: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, paddingLeft: 16, paddingRight: 4, minHeight: minTouch + 12 },
   iconButton: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
 });

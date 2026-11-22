@@ -1,5 +1,5 @@
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
@@ -8,8 +8,8 @@ import { minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 
 /**
- * Apple-style building blocks shared by the pushed screens (Settings and the pages under it,
- * Donate your voice, licences): navigation bar, grouped inset lists, rows and buttons.
+ * Apple-style building blocks shared by every screen: navigation bar, grouped inset lists,
+ * rows, search field and buttons.
  */
 
 /** Inline navigation bar: back chevron with the previous screen's name, centred title. */
@@ -70,15 +70,33 @@ export function LargeTitle({ children }: { children: string }) {
 }
 
 /** Inset grouped list: header above, rows separated by inset hairlines, footer below. */
-export function Group({ header, footer, children }: { header?: string; footer?: ReactNode; children: ReactNode }) {
+export function Group({
+  header,
+  footer,
+  action,
+  children,
+}: {
+  header?: string;
+  footer?: ReactNode;
+  /** A text link at the right of the header, such as See All. */
+  action?: { label: string; onPress: () => void };
+  children: ReactNode;
+}) {
   const { colors } = useTheme();
   const rows = Children.toArray(children).filter(isValidElement);
   return (
     <View style={{ gap: 7 }}>
       {header ? (
-        <Text style={[type.overline, styles.groupHeader, { color: colors.textSecondary }]} accessibilityRole="header">
-          {header}
-        </Text>
+        <View style={styles.groupHead}>
+          <Text style={[type.overline, { color: colors.textSecondary, flex: 1 }]} accessibilityRole="header">
+            {header}
+          </Text>
+          {action ? (
+            <Pressable onPress={action.onPress} accessibilityRole="button" hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.4 }}>
+              <Text style={[type.subheadline, { color: colors.accentText }]}>{action.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
       {rows.length ? (
         <View style={[styles.group, { backgroundColor: colors.card }]}>
@@ -91,6 +109,75 @@ export function Group({ header, footer, children }: { header?: string; footer?: 
         </View>
       ) : null}
       {typeof footer === 'string' ? <Text style={[type.footnote, styles.groupFooter, { color: colors.textSecondary }]}>{footer}</Text> : footer}
+    </View>
+  );
+}
+
+/** A list item that opens something: icon tile, title, a line of detail, chevron. */
+export function ListRow({
+  icon,
+  title,
+  subtitle,
+  tint,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon?: IconName;
+  title: string;
+  subtitle?: string;
+  /** Icon tile in the accent tint (live and attention items). */
+  tint?: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? (subtitle ? `${title}, ${subtitle}` : title)}
+      style={({ pressed }) => [styles.row, { paddingVertical: 10 }, pressed && { backgroundColor: colors.chipPressed }]}
+    >
+      {icon ? (
+        <View style={[styles.rowIcon, { backgroundColor: tint ? colors.warning : colors.chip }]}>
+          <Icon name={icon} size={18} color={tint ? colors.accentText : colors.text} />
+        </View>
+      ) : null}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[type.body, { color: colors.text }]} numberOfLines={2}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[type.footnote, { color: colors.textSecondary }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <Icon name="arrow" size={14} color={colors.textTertiary} strokeWidth={2.4} />
+    </Pressable>
+  );
+}
+
+/** Search field: grey rounded box with a magnifying glass, as in iOS. */
+export function SearchField({ value, onChangeText, placeholder, label }: { value: string; onChangeText: (t: string) => void; placeholder: string; label: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.search, { backgroundColor: colors.chip }]}>
+      <Icon name="search" size={18} color={colors.textSecondary} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSecondary}
+        accessibilityLabel={label}
+        returnKeyType="search"
+        style={[type.body, { color: colors.text, flex: 1, paddingVertical: 0 }]}
+      />
+      {value ? (
+        <Pressable onPress={() => onChangeText('')} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10}>
+          <Icon name="close" size={16} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -218,7 +305,9 @@ const styles = StyleSheet.create({
   navTitle: { position: 'absolute', left: 96, right: 96, textAlign: 'center' },
   navRight: { flex: 1, alignItems: 'flex-end' },
   group: { borderRadius: radius.group, overflow: 'hidden', ...squircle },
-  groupHeader: { paddingHorizontal: 16 },
+  groupHead: { flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: 16 },
+  rowIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', ...squircle },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: minTouch, paddingHorizontal: 12, borderRadius: radius.input, ...squircle },
   groupFooter: { paddingHorizontal: 16 },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: minTouch, paddingHorizontal: 16, paddingVertical: 11 },

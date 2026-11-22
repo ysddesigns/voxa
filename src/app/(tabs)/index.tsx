@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, Redirect, useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/icons';
 import { Screen } from '@/components/screen';
+import { Group, ListRow, TextRow } from '@/components/ui';
 import { Waveform } from '@/components/waveform';
 import { useTheme } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
+import { minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
@@ -88,8 +89,8 @@ export default function Home() {
             </Pressable>
           ))}
           <View style={{ flex: 1 }} />
-          <View style={[styles.plus, { backgroundColor: '#111111' }]}>
-            <Icon name="plus" color="#FFFFFF" />
+          <View style={[styles.plus, { backgroundColor: colors.primaryFill }]}>
+            <Icon name="plus" color={colors.onPrimary} />
           </View>
         </View>
       </Pressable>
@@ -99,43 +100,26 @@ export default function Home() {
         <Tile icon="mic" title="Start listening" sub="Live captions" onPress={() => router.push('/live')} />
       </View>
 
-      <View style={styles.sectionHead}>
-        <Text style={[type.heading, { color: colors.text }]}>Recent</Text>
-        <Link href="/library" style={[type.callout, { color: colors.accentText }]}>
-          See all
-        </Link>
-      </View>
-      <View style={[styles.list, { backgroundColor: colors.card }]}>
+      <Group header="Recent" action={recent.length ? { label: 'See All', onPress: () => router.navigate('/library') } : undefined}>
         {recent.length === 0 ? (
-          <Text style={[type.callout, { color: colors.textTertiary, paddingVertical: 16 }]}>
-            Nothing saved yet. Meetings you listen to appear here.
-          </Text>
+          <TextRow>
+            <Text style={[type.subheadline, { color: colors.textSecondary }]}>Nothing saved yet. Meetings you listen to appear here.</Text>
+          </TextRow>
         ) : null}
-        {recent.map((item, i) => (
-          <Pressable
+        {recent.map((item) => (
+          <ListRow
             key={item.id}
-            accessibilityRole="button"
+            icon={item.kind === 'scan' ? 'scan' : 'live'}
+            title={item.title}
+            subtitle={
+              item.kind === 'scan'
+                ? `Scanned · ${formatDay(item.startedAt)}`
+                : `${formatDay(item.startedAt)} · ${formatDuration(item.durationMs)}${item.speakers ? ` · ${item.speakers} speakers` : ''}`
+            }
             onPress={() => router.push({ pathname: '/session/[id]', params: { id: item.id } })}
-            style={({ pressed }) => [
-              styles.row,
-              i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator },
-              pressed && { opacity: 0.6 },
-            ]}
-          >
-            <View style={[styles.rowIcon, { backgroundColor: colors.warning }]}>
-              <Icon name={item.kind === 'scan' ? 'scan' : 'live'} size={18} color={colors.accentText} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.bodyStrong, { color: colors.text }]} numberOfLines={2}>{item.title}</Text>
-              <Text style={[type.caption, { color: colors.textTertiary }]}>
-                {item.kind === 'scan'
-                  ? `Scanned · ${formatDay(item.startedAt)}`
-                  : `${formatDay(item.startedAt)} · ${formatDuration(item.durationMs)}${item.speakers ? ` · ${item.speakers} speakers` : ''}`}
-              </Text>
-            </View>
-          </Pressable>
+          />
         ))}
-      </View>
+      </Group>
     </Screen>
   );
 }
@@ -147,29 +131,25 @@ function Tile({ icon, title, sub, onPress }: { icon: IconName; title: string; su
       accessibilityRole="button"
       accessibilityLabel={title}
       onPress={onPress}
-      style={({ pressed }) => [styles.tile, { backgroundColor: pressed ? colors.chipPressed : colors.card }]}
+      style={({ pressed }) => [styles.tile, { backgroundColor: pressed ? colors.chipPressed : colors.card, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
     >
       <View style={[styles.tileIcon, { backgroundColor: colors.primaryFill }]}>
         <Icon name={icon} color={colors.onPrimary} />
       </View>
-      <Text style={[type.bodyStrong, { color: colors.text }]}>{title}</Text>
-      <Text style={[type.caption, { color: colors.textTertiary }]}>{sub}</Text>
+      <Text style={[type.headline, { color: colors.text }]}>{title}</Text>
+      <Text style={[type.footnote, { color: colors.textSecondary }]}>{sub}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   avatar: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },
-  hero: { borderRadius: radius.hero, padding: 22, gap: 16 },
+  hero: { borderRadius: radius.hero, ...squircle, padding: 20, gap: 16 },
   heroWave: { height: 60, justifyContent: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   heroChip: { borderRadius: radius.chip, paddingHorizontal: 14, minHeight: minTouch, justifyContent: 'center' },
-  plus: { width: minTouch + 4, height: minTouch + 4, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  plus: { width: minTouch + 4, height: minTouch + 4, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   tiles: { flexDirection: 'row', gap: 12 },
-  tile: { flex: 1, borderRadius: radius.tile, padding: 16, gap: 6 },
-  tileIcon: { width: 40, height: 40, borderRadius: radius.icon, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 },
-  list: { borderRadius: radius.card, paddingHorizontal: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  rowIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  tile: { flex: 1, borderRadius: radius.tile, ...squircle, padding: 16, gap: 4 },
+  tileIcon: { width: 40, height: 40, borderRadius: radius.icon, ...squircle, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
 });

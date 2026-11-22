@@ -5,9 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
 import { Screen } from '@/components/screen';
+import { Button, Card, Group, ListRow, TextRow } from '@/components/ui';
 import { announce, useScreenReader } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
+import { minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { useEngines } from '@/engines/provider';
 import { useListen } from '@/features/listen/listen-session';
@@ -44,59 +45,53 @@ function Ready() {
   return (
     <Screen title="Live" overline="Listen">
       {l.recovered.length > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            const id = l.recovered[0].id;
-            l.dismissRecovered();
-            router.push({ pathname: '/session/[id]', params: { id } });
-          }}
-          style={[styles.banner, { backgroundColor: colors.warning }]}
-        >
-          <Text style={[type.bodyStrong, { color: colors.accentText }]}>
-            {l.recovered.length === 1 ? 'A meeting was interrupted' : `${l.recovered.length} meetings were interrupted`}
-          </Text>
-          <Text style={[type.caption, { color: colors.text }]}>
-            Voxa closed while listening. Everything heard up to then was saved. Tap to open it.
-          </Text>
-        </Pressable>
+        <Group footer="Voxa closed while listening. Everything heard up to then was saved.">
+          <ListRow
+            icon="flag"
+            tint
+            title={l.recovered.length === 1 ? 'A meeting was interrupted' : `${l.recovered.length} meetings were interrupted`}
+            subtitle="Tap to open it"
+            onPress={() => {
+              const id = l.recovered[0].id;
+              l.dismissRecovered();
+              router.push({ pathname: '/session/[id]', params: { id } });
+            }}
+          />
+        </Group>
       ) : null}
 
-      <View style={[styles.hero, { backgroundColor: colors.card }]}>
-        <Text style={[type.title, { color: colors.text }]}>Live captions</Text>
-        <Text style={[type.body, { color: colors.textSecondary }]}>
+      <Card style={{ padding: 20, gap: 14 }}>
+        <Text style={[type.heading, { color: colors.text }]}>Live captions</Text>
+        <Text style={[type.subheadline, { color: colors.textSecondary }]}>
           Voxa writes down what it hears, on this phone, with no internet. It keeps listening with the screen off. Everything is saved as it goes.
         </Text>
         {models.ready.listen ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Start listening"
+          <Button
+            label="Start Listening"
+            icon="mic"
+            accent
             onPress={() => {
               l.clearError();
               void l.start();
             }}
-            style={({ pressed }) => [styles.start, { backgroundColor: pressed ? colors.accentText : colors.accent }]}
-          >
-            <Icon name="mic" color={colors.onAccent} />
-            <Text style={[type.bodyStrong, { color: colors.onAccent }]}>Start listening</Text>
-          </Pressable>
+          />
         ) : (
           <>
-            <Text style={[type.callout, { color: colors.text }]}>First, a one-time download. After that Live works with no internet.</Text>
+            <Text style={[type.subheadline, { color: colors.text }]}>First, a one-time download. After that Live works with no internet.</Text>
             <ModelRow id="listen" title="Listening" what="Live captions in English" />
           </>
         )}
-      </View>
+      </Card>
 
       {l.error ? <Text style={[type.callout, { color: colors.accentText }]}>{l.error}</Text> : null}
 
       <BatteryTip />
 
-      <View style={[styles.tips, { backgroundColor: colors.card }]}>
+      <Group header="Good to know">
         <Tip icon="flag" text="Tap Mark at an important moment to find it later." />
         <Tip icon="person" text="Speakers are labelled after the meeting ends." />
         <Tip icon="lock" text="Audio never leaves the phone and is deleted once speakers are labelled." />
-      </View>
+      </Group>
     </Screen>
   );
 }
@@ -109,10 +104,10 @@ function BatteryTip() {
   const { prefs, update } = usePrefs();
   if (!shouldShowTip({ android: battery.android, unrestricted: battery.unrestricted, strict: battery.guide.strict, dismissed: prefs.batteryTipDismissed })) return null;
   return (
-    <View style={[styles.banner, { backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-      <Pressable accessibilityRole="button" onPress={() => router.push('/battery')} style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.bodyStrong, { color: colors.text }]}>Keep listening with the screen off</Text>
-        <Text style={[type.caption, { color: colors.textSecondary }]}>
+    <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 4 }}>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/battery')} style={({ pressed }) => [{ flex: 1, gap: 2 }, pressed && { opacity: 0.6 }]}>
+        <Text style={[type.headline, { color: colors.text }]}>Keep listening with the screen off</Text>
+        <Text style={[type.footnote, { color: colors.textSecondary }]}>
           Your phone’s battery saver may stop Voxa mid-meeting. Tap to see the two-minute fix.
         </Text>
       </Pressable>
@@ -124,17 +119,19 @@ function BatteryTip() {
       >
         <Icon name="close" size={18} color={colors.textTertiary} />
       </Pressable>
-    </View>
+    </Card>
   );
 }
 
 function Tip({ icon, text }: { icon: IconName; text: string }) {
   const { colors } = useTheme();
   return (
-    <View style={styles.tip}>
-      <Icon name={icon} size={18} color={colors.accentText} />
-      <Text style={[type.callout, { color: colors.textSecondary, flex: 1 }]}>{text}</Text>
-    </View>
+    <TextRow>
+      <View style={styles.tip}>
+        <Icon name={icon} size={20} color={colors.accentText} />
+        <Text style={[type.subheadline, { color: colors.text, flex: 1 }]}>{text}</Text>
+      </View>
+    </TextRow>
   );
 }
 
@@ -294,11 +291,11 @@ function Control({ icon, label, onPress, primary, disabled }: { icon: IconName; 
       onPress={onPress}
       style={({ pressed }) => [
         styles.control,
-        { backgroundColor: primary ? colors.accent : pressed ? colors.chipPressed : colors.card, opacity: disabled ? 0.5 : 1 },
+        { backgroundColor: primary ? colors.accent : pressed ? colors.chipPressed : colors.card, opacity: disabled ? 0.4 : 1, transform: [{ scale: pressed && !disabled ? 0.97 : 1 }] },
       ]}
     >
       <Icon name={icon} size={22} color={primary ? colors.onAccent : colors.text} />
-      <Text style={[type.callout, { color: primary ? colors.onAccent : colors.text }]}>{label}</Text>
+      <Text style={[type.subheadline, { color: primary ? colors.onAccent : colors.text, fontFamily: type.headline.fontFamily }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -306,13 +303,9 @@ function Control({ icon, label, onPress, primary, disabled }: { icon: IconName; 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   head: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 20 },
-  banner: { borderRadius: radius.card, padding: 16, gap: 4 },
-  hero: { borderRadius: radius.hero, padding: 22, gap: 14 },
-  start: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: minTouch + 8, borderRadius: radius.pill },
-  tips: { borderRadius: radius.card, padding: 16, gap: 12 },
-  tip: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  tip: { flexDirection: 'row', gap: 12, alignItems: 'center', flex: 1 },
   level: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 36, paddingHorizontal: 20, marginTop: 12 },
   mark: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderRadius: radius.chip, paddingHorizontal: 10, paddingVertical: 4 },
   controls: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 10 },
-  control: { flex: 1, minHeight: minTouch + 16, borderRadius: radius.tile, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  control: { flex: 1, minHeight: minTouch + 16, borderRadius: radius.tile, ...squircle, alignItems: 'center', justifyContent: 'center', gap: 4 },
 });

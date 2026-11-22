@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
+import { Button, NavBar } from '@/components/ui';
 import { VoiceAvatar } from '@/components/voice-avatar';
 import { useTheme } from '@/design/theme';
 import { elevation, minTouch, radius, squircle } from '@/design/tokens';
@@ -99,24 +100,22 @@ export default function Editor() {
       style={{ flex: 1, backgroundColor: colors.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.nav, { paddingTop: insets.top + 6 }]}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back to Home" style={styles.back}>
-          <Icon name="chevronLeft" color={colors.accentText} strokeWidth={2.2} />
-          <Text style={[type.callout, { color: colors.accentText, fontSize: 17 }]}>Home</Text>
-        </Pressable>
-        <Text numberOfLines={1} style={[type.bodyStrong, styles.navTitle, { color: colors.text, fontSize: 17 }]}>
-          {s.title}
-        </Text>
-        <Pressable
-          onPress={() => router.push('/player')}
-          disabled={!hasText}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !hasText }}
-          style={styles.navRight}
-        >
-          <Text style={[type.bodyStrong, { color: hasText ? colors.accentText : colors.textTertiary, fontSize: 17 }]}>Player</Text>
-        </Pressable>
-      </View>
+      <NavBar
+        back="Home"
+        title={s.title}
+        right={
+          <Pressable
+            onPress={() => router.push('/player')}
+            disabled={!hasText}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !hasText }}
+            hitSlop={8}
+            style={({ pressed }) => [styles.navRight, pressed && { opacity: 0.4 }]}
+          >
+            <Text style={[type.headline, { color: hasText ? colors.accentText : colors.textTertiary }]}>Player</Text>
+          </Pressable>
+        }
+      />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -132,8 +131,8 @@ export default function Editor() {
           >
             <VoiceAvatar name={voice?.name ?? '?'} />
             <View style={{ flex: 1 }}>
-              <Text style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{voice?.name ?? 'Pick a voice'}</Text>
-              <Text style={[type.caption, { color: colors.textTertiary, fontSize: 12 }]} numberOfLines={1}>
+              <Text style={[type.headline, { color: colors.text }]}>{voice?.name ?? 'Pick a voice'}</Text>
+              <Text style={[type.footnote, { color: colors.textSecondary }]} numberOfLines={1}>
                 {voice ? voice.tags.slice(0, 2).join(' · ') : 'No voice installed'}
               </Text>
             </View>
@@ -145,8 +144,8 @@ export default function Editor() {
             accessibilityLabel={`Speed ${formatSpeed(s.rate)}. Change speed`}
             style={[styles.speed, { backgroundColor: colors.card }]}
           >
-            <Text maxFontSizeMultiplier={1.4} style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
-            <Text maxFontSizeMultiplier={1.4} style={[type.caption, { color: colors.textTertiary, fontSize: 11 }]}>Speed</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.headline, { color: colors.text }]}>{formatSpeed(s.rate)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.caption, { color: colors.textSecondary }]}>Speed</Text>
           </Pressable>
         </View>
 
@@ -170,7 +169,7 @@ export default function Editor() {
               <Tool icon="speaker" label="Say as" hint="Tells Voxa how to say the word at the cursor" onPress={openSayAs} />
               <Tool icon="wave" label={`Style: ${STYLE_LABEL[s.style]}`} hint="Changes the reading style: Neutral, Warm, Upbeat or Slow" onPress={s.cycleStyle} />
             </ScrollView>
-            <Text style={[type.caption, { color: hint ? colors.accentText : colors.textTertiary, paddingHorizontal: 4 }]} accessibilityLiveRegion="polite">
+            <Text style={[type.footnote, { color: hint ? colors.accentText : colors.textSecondary, paddingHorizontal: 4 }]} accessibilityLiveRegion="polite">
               {reading !== null && reading > 0
                 ? `Reading the PDF… ${Math.round(reading * 100)}%`
                 : hint || 'Write *word* to stress it, and [pause] for a pause.'}
@@ -218,7 +217,7 @@ export default function Editor() {
               <Text style={[type.caption, { color: colors.textTertiary }]}>Works offline</Text>
             </View>
             {s.error && (
-              <Text style={[type.caption, { color: colors.warning }]} accessibilityLiveRegion="polite">
+              <Text style={[type.caption, { color: colors.accentText }]} accessibilityLiveRegion="polite">
                 {`Couldn't play: ${s.error}`}
               </Text>
             )}
@@ -274,10 +273,10 @@ function Tool({ icon, label, hint, onPress, onLongPress }: { icon: IconName; lab
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={hint}
-      style={({ pressed }) => [styles.tool, { backgroundColor: pressed ? colors.chipPressed : colors.card }]}
+      style={({ pressed }) => [styles.tool, { backgroundColor: pressed ? colors.chipPressed : colors.card, transform: [{ scale: pressed ? 0.97 : 1 }] }]}
     >
       <Icon name={icon} size={16} color={colors.text} />
-      <Text style={[type.callout, { color: colors.text }]}>{label}</Text>
+      <Text style={[type.subheadline, { color: colors.text }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -304,10 +303,11 @@ function SayAsSheet({ word, onClose }: { word: string | null; onClose: () => voi
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button" />
         <View style={[styles.sayAs, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+          <View style={[styles.grabber, { backgroundColor: colors.chipPressed }]} />
           <Text style={[type.heading, { color: colors.text }]} accessibilityRole="header">
             How should Voxa say “{word}”?
           </Text>
-          <Text style={[type.callout, { color: colors.textSecondary }]}>
+          <Text style={[type.subheadline, { color: colors.textSecondary }]}>
             Write it the way it sounds, with hyphens between parts. For example Nnamdi → Nahm-dee, NEPA → nee-pah.
           </Text>
           <TextInput
@@ -321,41 +321,23 @@ function SayAsSheet({ word, onClose }: { word: string | null; onClose: () => voi
             style={[type.body, styles.sayAsInput, { color: colors.text, backgroundColor: colors.chip }]}
           />
           <View style={styles.sayAsActions}>
-            <SheetButton label="Try it" onPress={() => s.trySound(sound || word || '')} />
-            {saved ? <SheetButton label="Remove" onPress={() => void save('')} /> : null}
-            <SheetButton label="Save" primary disabled={!sound.trim()} onPress={() => void save(sound)} />
+            <Button label="Try It" kind="gray" icon="play" onPress={() => s.trySound(sound || word || '')} style={{ flexGrow: 1 }} />
+            {saved ? <Button label="Remove" kind="gray" onPress={() => void save('')} style={{ flexGrow: 1 }} /> : null}
+            <Button label="Save" disabled={!sound.trim()} onPress={() => void save(sound)} style={{ flexGrow: 1 }} />
           </View>
-          <Text style={[type.caption, { color: colors.textTertiary }]}>Saved on this phone and used everywhere Voxa speaks.</Text>
+          <Text style={[type.footnote, { color: colors.textSecondary }]}>Saved on this phone and used everywhere Voxa speaks.</Text>
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-function SheetButton({ label, onPress, primary, disabled }: { label: string; onPress: () => void; primary?: boolean; disabled?: boolean }) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed }) => [styles.sheetButton, { backgroundColor: primary ? colors.primaryFill : colors.chip, opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}
-    >
-      <Text style={[type.callout, { color: primary ? colors.onPrimary : colors.text }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  nav: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingBottom: 4 },
-  back: { flexDirection: 'row', alignItems: 'center', gap: 2, height: minTouch, paddingHorizontal: 6, minWidth: 90 },
-  navTitle: { flex: 1, textAlign: 'center' },
-  navRight: { minWidth: 90, height: minTouch, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 8 },
+  navRight: { height: minTouch, justifyContent: 'center', paddingHorizontal: 8 },
   voiceRow: { flexDirection: 'row', gap: 8 },
   voiceChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.card, ...squircle, paddingVertical: 8, paddingLeft: 8, paddingRight: 12 },
   speed: { width: 76, borderRadius: radius.card, ...squircle, alignItems: 'center', justifyContent: 'center' },
-  sheet: { borderRadius: radius.tile, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 14 },
+  sheet: { borderRadius: radius.tile, ...squircle, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 14 },
   script: { fontFamily: type.body.fontFamily, fontSize: 20, lineHeight: 32 },
   input: { minHeight: 220, padding: 0 },
   sheetFoot: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
@@ -377,9 +359,9 @@ const styles = StyleSheet.create({
   times: { flexDirection: 'row', justifyContent: 'space-between' },
   tools: { gap: 8, paddingHorizontal: 2 },
   tool: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: minTouch, borderRadius: radius.pill, paddingHorizontal: 14 },
-  sayAs: { borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: 20, gap: 12 },
-  sayAsInput: { minHeight: minTouch + 4, borderRadius: radius.icon, paddingHorizontal: 14 },
+  sayAs: { borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, ...squircle, padding: 20, paddingTop: 8, gap: 12 },
+  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: radius.pill, marginBottom: 8 },
+  sayAsInput: { minHeight: minTouch + 4, borderRadius: radius.input, ...squircle, paddingHorizontal: 14 },
   sayAsActions: { flexDirection: 'row', gap: 8 },
-  sheetButton: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: minTouch + 4, borderRadius: radius.pill, paddingHorizontal: 16 },
   tabular: { fontVariant: ['tabular-nums'] },
 });

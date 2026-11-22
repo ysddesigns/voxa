@@ -67,7 +67,7 @@ export default function Player() {
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close player" style={styles.iconBtn}>
           <Icon name="chevronDown" size={24} color={colors.text} strokeWidth={2.2} />
         </Pressable>
-        <Text style={[type.caption, { color: colors.textSecondary, fontFamily: type.bodyStrong.fontFamily }]}>Now playing</Text>
+        <Text style={[type.footnote, { color: colors.textSecondary, fontFamily: type.headline.fontFamily }]}>Now Playing</Text>
         <View style={styles.iconBtn} />
       </View>
 
@@ -84,7 +84,7 @@ export default function Player() {
       <View style={styles.body}>
         <View style={{ gap: 3 }}>
           <Text numberOfLines={2} style={[type.title, { color: colors.text }]}>{s.title}</Text>
-          <Text style={[type.callout, { color: colors.textTertiary, fontFamily: type.body.fontFamily }]}>
+          <Text style={[type.subheadline, { color: colors.textSecondary }]}>
             {voice ? `${voice.name} · ${voiceSubtitle(voice)}` : 'No voice'}
           </Text>
         </View>
@@ -112,7 +112,7 @@ export default function Player() {
             accessibilityLabel={`Speed ${formatSpeed(s.rate)}. Change speed`}
             style={[styles.pill, { backgroundColor: colors.card }]}
           >
-            <Text maxFontSizeMultiplier={1.4} style={[type.bodyStrong, { color: colors.text, fontSize: 15 }]}>{formatSpeed(s.rate)}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={[type.subheadline, { color: colors.text, fontFamily: type.headline.fontFamily }]}>{formatSpeed(s.rate)}</Text>
           </Pressable>
           <RoundButton icon="back15" label="Back 15 seconds" onPress={() => s.skip(-15)} />
           <Pressable
@@ -120,7 +120,7 @@ export default function Player() {
             disabled={!s.words.length}
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
-            style={[styles.play, { backgroundColor: colors.primaryFill, ...elevation(colors.shadow) }]}
+            style={({ pressed }) => [styles.play, { backgroundColor: colors.primaryFill, ...elevation(colors.shadow), transform: [{ scale: pressed ? 0.95 : 1 }] }]}
           >
             <Icon name={playing ? 'pause' : 'play'} size={32} color={colors.onPrimary} />
           </Pressable>
@@ -138,13 +138,13 @@ export default function Player() {
 
         {exporting !== null ? (
           <View style={[styles.exportRow, { backgroundColor: colors.card }]} accessibilityLiveRegion="polite">
-            <Text style={[type.callout, { color: colors.text, flex: 1 }]}>Making the audio file… {Math.round(exporting * 100)}%</Text>
+            <Text style={[type.subheadline, { color: colors.text, flex: 1 }]}>Making the audio file… {Math.round(exporting * 100)}%</Text>
             <Pressable onPress={() => cancelExport.current?.()} accessibilityRole="button" style={styles.cancel}>
-              <Text style={[type.callout, { color: colors.accentText }]}>Cancel</Text>
+              <Text style={[type.headline, { color: colors.accentText }]}>Cancel</Text>
             </Pressable>
           </View>
         ) : exportNote ? (
-          <Text style={[type.callout, { color: colors.accentText }]} accessibilityLiveRegion="polite">
+          <Text style={[type.footnote, { color: colors.accentText }]} accessibilityLiveRegion="polite">
             {exportNote}
           </Text>
         ) : null}
@@ -161,7 +161,7 @@ export default function Player() {
 function RoundButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   const { colors } = useTheme();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.skip}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.skip, pressed && { opacity: 0.4, transform: [{ scale: 0.92 }] }]}>
       <Icon name={icon} size={34} color={colors.text} />
     </Pressable>
   );
@@ -170,16 +170,16 @@ function RoundButton({ icon, label, onPress }: { icon: IconName; label: string; 
 function Chip({ icon, text }: { icon: IconName; text: string }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.chip, { backgroundColor: colors.card }]}>
-      <Icon name={icon} size={15} color={colors.text} />
-      <Text style={[type.caption, { color: colors.text, fontFamily: type.bodyStrong.fontFamily }]}>{text}</Text>
+    <View style={[styles.chip, { backgroundColor: colors.chip }]}>
+      <Icon name={icon} size={15} color={colors.textSecondary} />
+      <Text style={[type.footnote, { color: colors.textSecondary }]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 24 },
-  grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3 },
+  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: radius.pill },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginHorizontal: -12 },
   iconBtn: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
   art: { marginTop: 8, flex: 1, maxHeight: 300, minHeight: 180, borderRadius: radius.card, ...squircle, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  exportRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.card, paddingLeft: 16, paddingRight: 4, minHeight: minTouch + 8 },
+  exportRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.group, ...squircle, paddingLeft: 16, paddingRight: 4, minHeight: minTouch + 8 },
   cancel: { minHeight: minTouch, justifyContent: 'center', paddingHorizontal: 12 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.pill },
 });
