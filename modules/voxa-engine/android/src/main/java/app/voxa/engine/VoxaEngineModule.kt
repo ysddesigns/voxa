@@ -507,6 +507,12 @@ class VoxaEngineModule : Module() {
       }
     }
 
+    // Android 16 Live Updates (the status-bar chip while listening): available, and on for Voxa?
+    Function("liveUpdateStatus") { ListenService.liveUpdates(context) }
+
+    // Opens the phone's Live Updates switch for Voxa (its notification settings on older phones).
+    Function("openLiveUpdateSettings") { ListenService.openLiveUpdateSettings(context) }
+
     // Scan text from an image (file:// or content:// uri). Lines top to bottom.
     // Export (PRD PL-2): renders the script to an .m4a (AAC) file with the phone's encoder.
     // options: text, sid, speed, overrides, fallbacks, voice, plan (as speakPlanned), dest (a path

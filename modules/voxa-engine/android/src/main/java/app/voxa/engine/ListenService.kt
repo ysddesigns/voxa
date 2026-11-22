@@ -12,6 +12,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 
 /**
@@ -23,6 +24,10 @@ import android.util.Log
  * a running timer, listening or paused, Pause/Resume, Mark and Stop buttons, and (only when the
  * person turns it on) the latest sentence, which is hidden on the lock screen. The buttons are sent
  * to the app as onListenAction events; the app does the work and sends the new state back.
+ *
+ * Where it shows: the notification shade and the status-bar icon (phone unlocked), the lock screen
+ * (timer and buttons, never captions), and on Android 16+ a Live Update: a chip in the status bar
+ * with the running timer, or "Paused" (the nearest Android has to the Dynamic Island).
  *
  * The service stays up while a session is paused, so Resume works from the notification with the
  * app in the background (Android does not let a background app start using the microphone).
@@ -41,8 +46,7 @@ class ListenService : Service() {
       return START_NOT_STICKY
     }
     instance = this
-    getSystemService(NotificationManager::class.java)
-      .createNotificationChannel(NotificationChannel(CHANNEL, "Listening", NotificationManager.IMPORTANCE_LOW))
+    ensureChannel(this)
     val notification = build(notice)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -93,6 +97,7 @@ class ListenService : Service() {
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setCategory(Notification.CATEGORY_STATUS)
+      .setColor(ACCENT)
       .setContentIntent(open)
     if (n.paused) {
       b.setUsesChronometer(false)
@@ -119,7 +124,25 @@ class ListenService : Service() {
       b.addAction(action("mark", "Mark", android.R.drawable.star_on))
       b.addAction(action("stop", "Stop", android.R.drawable.ic_menu_close_clear_cancel))
     }
+    if (Build.VERSION.SDK_INT >= ANDROID_16) promote(b, n)
     return b.build()
+  }
+
+  /**
+   * Android 16 Live Update: asks for the status-bar chip. While listening the chip shows the timer
+   * (from setWhen and the chronometer); while paused, the word Paused. The phone may still say no
+   * (the person turned Live Updates off for Voxa, or the brand's Android does not have them).
+   */
+  private fun promote(b: Notification.Builder, n: Notice) {
+    try {
+      // Notification.EXTRA_REQUEST_PROMOTED_ONGOING (API 36.1) by value: the same as
+      // setRequestPromotedOngoing(true), and simply ignored by an Android that does not know it.
+      b.extras.putBoolean("android.requestPromotedOngoing", true)
+      if (n.paused) b.setShortCriticalText("Paused")
+    } catch (e: Throwable) {
+      // An early Android 16 build without these calls: the plain notification still works.
+      Log.w("VoxaListen", "live update not available", e)
+    }
   }
 
   private fun action(name: String, label: String, icon: Int): Notification.Action {
@@ -138,7 +161,15 @@ class ListenService : Service() {
   )
 
   companion object {
-    private const val CHANNEL = "voxa-listen"
+    /**
+     * Silent but not "low": low-importance notifications lose their status-bar icon and are hidden
+     * on the lock screen on many phones, and cannot become Live Updates. The old low channel is removed.
+     */
+    private const val CHANNEL = "voxa-live"
+    private const val OLD_CHANNEL = "voxa-listen"
+    private const val ANDROID_16 = 36
+    /** Voxa orange: tints the small icon, the action buttons and the status-bar chip. */
+    private const val ACCENT = 0xFFD63F1C.toInt()
     private const val NOTIFICATION_ID = 4201
     private const val PREFIX = "app.voxa.listen."
     private val ACTIONS = setOf("pause", "resume", "mark", "stop").map { PREFIX + it }.toSet()
@@ -151,6 +182,45 @@ class ListenService : Service() {
     @Volatile var onAction: ((String) -> Unit)? = null
 
     val running: Boolean get() = instance != null
+
+    fun ensureChannel(context: Context) {
+      val manager = context.getSystemService(NotificationManager::class.java)
+      val channel = NotificationChannel(CHANNEL, "Live listening", NotificationManager.IMPORTANCE_DEFAULT).apply {
+        description = "Timer and Pause, Mark and Stop while Voxa is listening"
+        setSound(null, null)
+        enableVibration(false)
+        setShowBadge(false)
+      }
+      manager.createNotificationChannel(channel)
+      manager.deleteNotificationChannel(OLD_CHANNEL)
+    }
+
+    /** supported: this Android has Live Updates (16+). allowed: they are on for Voxa. */
+    fun liveUpdates(context: Context): Map<String, Boolean> {
+      if (Build.VERSION.SDK_INT < ANDROID_16) return mapOf("supported" to false, "allowed" to false)
+      val allowed = try {
+        context.getSystemService(NotificationManager::class.java).canPostPromotedNotifications()
+      } catch (e: Throwable) {
+        false
+      }
+      return mapOf("supported" to true, "allowed" to allowed)
+    }
+
+    /** Opens the Live Updates switch for Voxa, or its notification settings where there is none. */
+    fun openLiveUpdateSettings(context: Context): Boolean {
+      val intents = buildList {
+        if (Build.VERSION.SDK_INT >= ANDROID_16) add(Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS))
+        add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS))
+      }
+      return intents.any { intent ->
+        try {
+          context.startActivity(intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          true
+        } catch (e: Exception) {
+          false
+        }
+      }
+    }
 
     fun clock(ms: Long): String {
       val s = ms / 1000

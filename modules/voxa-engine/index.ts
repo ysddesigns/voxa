@@ -191,6 +191,10 @@ type VoxaEngineNative = {
   batteryStatus?(): { unrestricted: boolean };
   /** Opens battery settings; false when the phone has no such screen. Builds from 23 Nov 2026. */
   openBatterySettings?(which: 'optimisation' | 'app'): boolean;
+  /** Android 16 Live Updates (status-bar chip while listening): supported, and on for Voxa. Builds from 24 Nov 2026. */
+  liveUpdateStatus?(): { supported: boolean; allowed: boolean };
+  /** Opens Voxa's Live Updates switch (notification settings on older phones). Builds from 24 Nov 2026. */
+  openLiveUpdateSettings?(): boolean;
   /**
    * Donate your voice: records the microphone to a 16 kHz 16-bit mono WAV at `path` (inside the
    * app's files folder). Loudness arrives as onRecord. Builds from 23 Nov 2026.

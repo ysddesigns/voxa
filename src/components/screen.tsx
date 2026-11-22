@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LIVE_BAR_SPACE } from '@/components/live-bar';
 import { useTheme } from '@/design/theme';
 import { type } from '@/design/type';
+import { useListen } from '@/features/listen/listen-session';
 
 /** Shared screen shell: safe area, large title, and room for the floating tab bar. */
 export function Screen({ title, overline, right, children }: {
@@ -13,6 +15,9 @@ export function Screen({ title, overline, right, children }: {
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Leave room for the live bar above the Android tabs while listening.
+  const listening = useListen().status !== 'idle';
+  const liveBar = Platform.OS === 'android' && listening ? LIVE_BAR_SPACE : 0;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -20,7 +25,7 @@ export function Screen({ title, overline, right, children }: {
         paddingTop: insets.top + 12,
         paddingHorizontal: 16,
         // Android tab bar floats over content; iOS native tabs inset automatically.
-        paddingBottom: Platform.OS === 'ios' ? 32 : insets.bottom + 112,
+        paddingBottom: Platform.OS === 'ios' ? 32 : insets.bottom + 112 + liveBar,
         gap: 24,
       }}
       contentInsetAdjustmentBehavior="automatic"

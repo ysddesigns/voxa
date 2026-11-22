@@ -13,6 +13,7 @@ import { useListen } from '@/features/listen/listen-session';
 import { useModels } from '@/features/packs/models';
 import { formatMB } from '@/features/packs/rules';
 import { usePrefs } from '@/features/settings/prefs';
+import { useLiveUpdates } from '@/features/settings/use-live-updates';
 import { deleteAllSessions, deleteWaitingAudio, readStorage, totalBytes, type StorageUse } from '@/features/settings/storage';
 import { useVoices } from '@/features/voices/voices-store';
 import { sessionStore } from '@/storage';
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const tier = useDeviceTier();
   const [storage, setStorage] = useState<StorageUse>(readStorage);
   const models = useModels();
+  const liveUpdates = useLiveUpdates();
   const android = Platform.OS === 'android';
 
   // Re-read after anything that changes what is stored.
@@ -91,8 +93,12 @@ export default function SettingsScreen() {
           <ToggleRow label="Discreet mode" value={prefs.discreet} onChange={(v) => update({ discreet: v })} />
         </Group>
 
-        <Group header="Listening" footer="With TalkBack or VoiceOver on, each new caption is read out, which also works with a braille display.">
+        <Group
+          header="Listening"
+          footer={`${liveUpdates.supported ? 'Live Updates show the listening time in the status bar, even on the lock screen. ' : ''}With TalkBack or VoiceOver on, each new caption is read out, which also works with a braille display.`}
+        >
           {android ? <NavRow label="Keep listening with the screen off" onPress={() => router.push('/battery')} /> : null}
+          {liveUpdates.supported ? <NavRow label="Live Updates" value={liveUpdates.allowed ? 'On' : 'Off'} onPress={() => liveUpdates.open()} /> : null}
           <ToggleRow label="Read captions aloud" value={prefs.readCaptions} onChange={(v) => update({ readCaptions: v })} />
           {android ? (
             <ToggleRow

@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LiveBar } from '@/components/live-bar';
 import { useTheme } from '@/design/theme';
 import { elevation } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -23,13 +24,19 @@ export const TAB_ICONS: Record<string, { icon: IconName; label: string }> = {
 export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const bottom = Math.max(insets.bottom, 12) + 8;
+  const current = state.routes[state.index]?.name;
+  const liveKey = state.routes.find((r) => r.name === 'live')?.key;
 
   return (
+    <>
+      {/* Listening on another tab: the live bar sits just above the tabs (Live shows it all itself). */}
+      {current !== 'live' && liveKey ? <LiveBar onOpen={() => navigateToTab(liveKey)} style={[styles.live, { bottom: bottom + 64 + 8 }]} /> : null}
     <View
       style={[
         styles.bar,
         {
-          bottom: Math.max(insets.bottom, 12) + 8,
+          bottom,
           backgroundColor: colors.tabBar,
           ...elevation(colors.shadow),
         },
@@ -62,10 +69,12 @@ export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
         );
       })}
     </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  live: { position: 'absolute', left: 16, right: 16 },
   bar: {
     position: 'absolute',
     left: 20,
