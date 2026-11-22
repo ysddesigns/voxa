@@ -323,6 +323,10 @@ A release APK has the JavaScript built in, so it runs without your PC. Use it to
 
 Output: `android\app\build\outputs\apk\release\app-release.apk`
 
+**Size gate (60 MB per phone).** Run `.\scripts\fetch-engine.ps1` without `-BundleAll` first, so listening, speaker labels and Kitten stay out of the app (they are packs). The script refuses a release that would bundle them, unless you pass `-AllowLabModels` for a lab build. After building it prints the estimated Play download for one arm64 phone. You can also run it on its own: `.\scripts\apk-size.ps1`.
+
+The APK file itself is bigger than that number (about 130 MB slim) because it carries both ABIs and stores native libraries uncompressed. A phone installing from Google Play gets one ABI, compressed. The slim app measured about 48 MB this way on 22 Nov 2026.
+
 > **Signing:** the generated project signs release builds with the **debug key** (`android/app/debug.keystore`). That's fine for testers, but Google Play won't accept it. For the store, use [section 9](#9-google-play-build-aab).
 >
 > **Not yet tested here.** The debug build was tested; the release build hasn't been run on this PC yet.

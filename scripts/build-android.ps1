@@ -5,7 +5,7 @@
 .EXAMPLE
   .\scripts\build-android.ps1                     # debug APK for real phones (arm64-v8a, armeabi-v7a)
   .\scripts\build-android.ps1 -Install            # build, then install on the USB-connected phone
-  .\scripts\build-android.ps1 -Release            # release APK (JS bundled in, no dev server needed)
+  .\scripts\build-android.ps1 -Release            # release APK (JS bundled in, no dev server needed), then its per-phone size
   .\scripts\build-android.ps1 -WithEmulator       # also include x86_64 for the Android emulator
   .\scripts\build-android.ps1 -Prebuild           # regenerate android/ first (after app.json or icon changes)
 #>
@@ -16,6 +16,7 @@ param(
   [switch]$Install,
   [switch]$Prebuild,
   [switch]$Clean,
+  [switch]$AllowLabModels,  # release only: allow the models fetch-engine.ps1 -BundleAll adds
   [string]$Sdk = "$env:LOCALAPPDATA\Android\Sdk",
   [string]$Jdk = "C:\Program Files\Java\jdk-25",
   [string]$CMakeVersion = ""
@@ -43,6 +44,17 @@ if (-not $CMakeVersion) {
 Write-Host "SDK:   $Sdk"
 Write-Host "JDK:   $Jdk"
 Write-Host "CMake: $CMakeVersion"
+
+# A release must not carry the lab models: listening, speaker labels and Kitten are packs.
+# They are bundled only after fetch-engine.ps1 -BundleAll, which is for lab builds.
+if ($Release -and -not $AllowLabModels) {
+  $labModels = @('asr', 'tts', 'vad', 'diar') |
+    Where-Object { Test-Path "modules\voxa-engine\android\src\main\assets\voxa-models\$_" }
+  if ($labModels) {
+    Fail ("The app would bundle lab models ($($labModels -join ', ')) and miss the 60 MB gate. " +
+      "Run .\scripts\fetch-engine.ps1 (slim, no -BundleAll) first, or pass -AllowLabModels for a lab release.")
+  }
+}
 
 if (-not (Test-Path "node_modules")) { Step "Installing packages (npm ci)"; npm ci; if ($LASTEXITCODE) { Fail "npm ci failed" } }
 
@@ -83,6 +95,10 @@ $apk = "android\app\build\outputs\apk\$($variant.ToLower())\app-$($variant.ToLow
 if (-not (Test-Path $apk)) { Fail "Build finished but $apk is missing." }
 $mb = [math]::Round((Get-Item $apk).Length / 1MB, 1)
 Write-Host "`nAPK: $apk ($mb MB)" -ForegroundColor Green
+if ($Release) {
+  Step "Per-phone download size (60 MB gate)"
+  & "$PSScriptRoot\apk-size.ps1" -Apk $apk
+}
 
 # --- Install ---------------------------------------------------------------------
 if ($Install) {

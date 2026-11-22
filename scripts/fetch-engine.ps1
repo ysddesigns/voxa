@@ -122,7 +122,7 @@ Copy-Item (Join-Path $cache 'downloads\diarwav\0-four-speakers-zh.wav') (Join-Pa
 
 function Drop($name) {
   $d = Join-Path $assets $name
-  if (Test-Path $d) { Remove-Item -Recurse -Force $d; Write-Host "  removed models/$name (downloaded as a pack in the app)" }
+  if (Test-Path $d) { Remove-Item -Recurse -Force $d; Write-Host "  removed models/$name (a pack in the app, or lab-only)" }
 }
 
 if ($BundleAll) {
