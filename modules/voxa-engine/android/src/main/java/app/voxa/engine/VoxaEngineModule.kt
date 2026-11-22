@@ -148,12 +148,13 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction", "onRecord", "onExport", "onDocument")
+    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction", "onRecord", "onExport", "onDocument", "onSpeakAction")
 
     // Notification buttons (Pause, Resume, Mark, Stop) go to the app, which does the work and
     // sends the new state back with showListenNotice.
     OnCreate {
       ListenService.onAction = { action -> sendEvent("onListenAction", mapOf("action" to action)) }
+      SpeakService.onAction = { action, positionMs -> sendEvent("onSpeakAction", mapOf("action" to action, "positionMs" to positionMs)) }
     }
 
     // The Listen notification: title, listening or paused, time listened (the system keeps the
@@ -165,6 +166,22 @@ class VoxaEngineModule : Module() {
       } catch (e: Throwable) {
         Log.w(TAG, "could not show the listening notification", e)
       }
+      Unit
+    }
+
+    // Speak for me's media notification and lock-screen controls: title, voice, playing or paused,
+    // where it is and how long. Buttons come back as onSpeakAction. Builds from 24 Nov 2026.
+    Function("showSpeakNotice") { title: String, subtitle: String, playing: Boolean, positionMs: Double, durationMs: Double ->
+      try {
+        SpeakService.update(context, SpeakService.Notice(title, subtitle, playing, positionMs.toLong(), durationMs.toLong()))
+      } catch (e: Throwable) {
+        Log.w(TAG, "could not show the speaking notification", e)
+      }
+      Unit
+    }
+
+    Function("endSpeakNotice") {
+      try { SpeakService.stop(context) } catch (e: Throwable) { Log.w(TAG, "could not end the speaking notification", e) }
       Unit
     }
 
@@ -584,6 +601,8 @@ class VoxaEngineModule : Module() {
     OnDestroy {
       // The app (or its JS) is going away: no one is left to answer the notification's buttons.
       ListenService.onAction = null
+      SpeakService.onAction = null
+      try { appContext.reactContext?.let { SpeakService.stop(it) } } catch (_: Throwable) {}
       noticeActive = false
       try { appContext.reactContext?.let { ListenService.stop(it) } } catch (_: Throwable) {}
       speakGen.incrementAndGet()

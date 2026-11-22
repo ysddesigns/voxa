@@ -4,6 +4,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Speak for me keeps playing with the screen off, with controls on the lock screen. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <!-- Android 16 Live Updates: the Listen notification may show as a chip in the status bar. -->
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
@@ -18,5 +20,9 @@
       android:name="app.voxa.engine.ListenService"
       android:exported="false"
       android:foregroundServiceType="microphone" />
+    <service
+      android:name="app.voxa.engine.SpeakService"
+      android:exported="false"
+      android:foregroundServiceType="mediaPlayback" />
   </application>
 </manifest>

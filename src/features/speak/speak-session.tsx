@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
+import { VoxaEngine } from '../../../modules/voxa-engine';
 import { useEngines } from '@/engines/provider';
 import type { ExportHandle, SpeakHandle } from '@/engines/types';
 import { usePrefs } from '@/features/settings/prefs';
@@ -283,10 +285,47 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const total = durationMs(words.length, pace) + parsed.pauseMs;
   const position = status === 'idle' ? 0 : Math.min(total, Math.round(wordIndex * msPerWord(pace) + parsed.pauseMs * (wordIndex / Math.max(1, words.length))));
 
+  // The media notification and lock-screen controls (Android): shown while playing or paused.
+  // Position is sent when the state changes and every 5 seconds; the system moves it on in between.
+  const title = makeTitle(text);
+  const voiceName = byId(effectiveVoice)?.name ?? '';
+  const sync = Math.floor(position / 5000);
+  const notices = Platform.OS === 'android' && !!VoxaEngine?.showSpeakNotice;
+  useEffect(() => {
+    if (!notices) return;
+    try {
+      if (status === 'idle') VoxaEngine?.endSpeakNotice?.();
+      else VoxaEngine?.showSpeakNotice?.(title, voiceName ? `${voiceName} · Voxa` : 'Voxa', status === 'playing', position, total);
+    } catch {
+      // The notification is a convenience; playback goes on without it.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- position on purpose only through `sync`
+  }, [notices, status, title, voiceName, total, sync]);
+
+  // Its buttons: the newest controls, without re-subscribing on every word.
+  const controls = useRef({ status, total, toggle, pause, stop, skip, seekFraction });
+  useEffect(() => {
+    controls.current = { status, total, toggle, pause, stop, skip, seekFraction };
+  });
+  useEffect(() => {
+    if (!notices || !VoxaEngine) return;
+    const sub = VoxaEngine.addListener('onSpeakAction', ({ action, positionMs }) => {
+      const c = controls.current;
+      if (action === 'play') {
+        if (c.status !== 'playing') c.toggle();
+      } else if (action === 'pause') c.pause();
+      else if (action === 'back') c.skip(-15);
+      else if (action === 'forward') c.skip(15);
+      else if (action === 'stop') c.stop();
+      else if (action === 'seek' && c.total > 0) c.seekFraction(Math.min(1, Math.max(0, positionMs / c.total)));
+    });
+    return () => sub.remove();
+  }, [notices]);
+
   const value: SpeakValue = {
     text,
     setText,
-    title: makeTitle(text),
+    title,
     words,
     voiceId: effectiveVoice,
     setVoiceId,

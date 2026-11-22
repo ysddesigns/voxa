@@ -5,6 +5,7 @@ import { LIVE_BAR_SPACE } from '@/components/live-bar';
 import { useTheme } from '@/design/theme';
 import { type } from '@/design/type';
 import { useListen } from '@/features/listen/listen-session';
+import { useSpeakSession } from '@/features/speak/speak-session';
 
 /** Shared screen shell: safe area, large title, and room for the floating tab bar. */
 export function Screen({ title, overline, right, children }: {
@@ -15,9 +16,10 @@ export function Screen({ title, overline, right, children }: {
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  // Leave room for the live bar above the Android tabs while listening.
+  // Leave room for the bar above the Android tabs while listening or speaking.
   const listening = useListen().status !== 'idle';
-  const liveBar = Platform.OS === 'android' && listening ? LIVE_BAR_SPACE : 0;
+  const speaking = useSpeakSession().status !== 'idle';
+  const liveBar = Platform.OS === 'android' && (listening || speaking) ? LIVE_BAR_SPACE : 0;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}

@@ -92,6 +92,9 @@ export type NativeScanLine = { text: string; confidence: number; unsureWords: st
 /** A button on the Listen notification. */
 export type ListenAction = 'pause' | 'resume' | 'mark' | 'stop';
 
+/** A button on Speak for me's notification or lock-screen controls (seek comes with positionMs). */
+export type SpeakAction = 'play' | 'pause' | 'back' | 'forward' | 'stop' | 'seek';
+
 export type NativeSpeakerTurn = { startMs: number; endMs: number; speaker: number };
 
 /** One listening model's run in compareAsr; error instead of the numbers when it could not run. */
@@ -191,6 +194,12 @@ type VoxaEngineNative = {
   batteryStatus?(): { unrestricted: boolean };
   /** Opens battery settings; false when the phone has no such screen. Builds from 23 Nov 2026. */
   openBatterySettings?(which: 'optimisation' | 'app'): boolean;
+  /**
+   * Speak for me's media notification and lock-screen controls: play/pause, 15-second skips, Stop and
+   * a seek bar (sent back as onSpeakAction). Builds from 24 Nov 2026.
+   */
+  showSpeakNotice?(title: string, subtitle: string, playing: boolean, positionMs: number, durationMs: number): void;
+  endSpeakNotice?(): void;
   /** Android 16 Live Updates (status-bar chip while listening): supported, and on for Voxa. Builds from 24 Nov 2026. */
   liveUpdateStatus?(): { supported: boolean; allowed: boolean };
   /** Opens Voxa's Live Updates switch (notification settings on older phones). Builds from 24 Nov 2026. */
@@ -230,6 +239,7 @@ type VoxaEngineNative = {
   addListener(event: 'onListen', listener: (e: NativeListenEvent) => void): EventSubscription;
   addListener(event: 'onLongTest', listener: (e: LongTestSample) => void): EventSubscription;
   addListener(event: 'onListenAction', listener: (e: { action: ListenAction }) => void): EventSubscription;
+  addListener(event: 'onSpeakAction', listener: (e: { action: SpeakAction; positionMs: number }) => void): EventSubscription;
 };
 
 /** Null on iOS, web, Jest, and Android builds made before the module was added. */

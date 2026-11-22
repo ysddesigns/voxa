@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon } from '@/components/icons';
+import { SpeakingWave } from '@/components/waveform';
 import { useTheme } from '@/design/theme';
 import { elevation, minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatClock } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
+import { formatTime } from '@/features/speak/playback';
+import { useSpeakSession } from '@/features/speak/speak-session';
 
 /**
  * In-app Live Activity: while Listen runs, a bar above the tabs on every other tab shows listening
@@ -69,6 +72,57 @@ export function LiveBar({ onOpen, style }: { onOpen: () => void; style?: StylePr
   );
 }
 
+/**
+ * In-app now-speaking bar: while Speak for me plays or is paused, the script's title, a wave that
+ * moves while it speaks, the time, and Play/Pause and Stop. Tapping it opens the Player.
+ */
+export function SpeakBar({ onOpen, style }: { onOpen: () => void; style?: StyleProp<ViewStyle> }) {
+  const { colors } = useTheme();
+  const s = useSpeakSession();
+  if (s.status === 'idle') return null;
+  const playing = s.status === 'playing';
+  const state = playing ? 'Speaking' : 'Paused';
+  return (
+    <View style={[styles.bar, { backgroundColor: colors.card, ...elevation(colors.shadow) }, style]}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${state}: ${s.title}`}
+        accessibilityHint="Opens the Player"
+        style={({ pressed }) => [styles.main, pressed && { opacity: 0.6 }]}
+      >
+        <View style={[styles.wave, { backgroundColor: colors.warning }]}>
+          <SpeakingWave bars={5} maxHeight={20} barWidth={3} gap={2.5} color={colors.accentText} active={playing} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.subheadline, { color: colors.text, fontFamily: type.headline.fontFamily }]} numberOfLines={1}>
+            {s.title}
+          </Text>
+          <Text style={[type.footnote, { color: colors.textSecondary, fontVariant: ['tabular-nums'] }]} numberOfLines={1}>
+            {state} · {formatTime(s.positionMs)} of {formatTime(s.durationMs)}
+          </Text>
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={s.toggle}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? 'Pause' : 'Play'}
+        style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.chipPressed : colors.chip }]}
+      >
+        <Icon name={playing ? 'pause' : 'play'} size={18} color={colors.text} />
+      </Pressable>
+      <Pressable
+        onPress={s.stop}
+        accessibilityRole="button"
+        accessibilityLabel="Stop speaking"
+        style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.chipPressed : colors.chip }]}
+      >
+        <Icon name="close" size={18} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+}
+
 /** Recording dot: breathes while listening, still when paused or when motion is reduced. */
 function Dot({ on, color }: { on: boolean; color: string }) {
   const [opacity] = useState(() => new Animated.Value(1));
@@ -103,5 +157,6 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 60, borderRadius: radius.card, ...squircle, paddingLeft: 16, paddingRight: 8 },
   main: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: minTouch },
   dot: { width: 10, height: 10, borderRadius: 5 },
+  wave: { width: 40, height: 40, borderRadius: radius.icon, ...squircle, alignItems: 'center', justifyContent: 'center' },
   button: { width: minTouch, height: minTouch, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
 });

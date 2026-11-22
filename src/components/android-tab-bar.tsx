@@ -1,8 +1,10 @@
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { Tabs } from 'expo-router';
+import { useRouter, type Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LiveBar } from '@/components/live-bar';
+import { LiveBar, SpeakBar } from '@/components/live-bar';
+import { useListen } from '@/features/listen/listen-session';
+import { useSpeakSession } from '@/features/speak/speak-session';
 import { useTheme } from '@/design/theme';
 import { elevation } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -27,11 +29,19 @@ export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const bottom = Math.max(insets.bottom, 12) + 8;
   const current = state.routes[state.index]?.name;
   const liveKey = state.routes.find((r) => r.name === 'live')?.key;
+  const router = useRouter();
+  const listening = useListen().status !== 'idle';
+  const speaking = useSpeakSession().status !== 'idle';
+  const above = [styles.live, { bottom: bottom + 64 + 8 }];
 
   return (
     <>
-      {/* Listening on another tab: the live bar sits just above the tabs (Live shows it all itself). */}
-      {current !== 'live' && liveKey ? <LiveBar onOpen={() => navigateToTab(liveKey)} style={[styles.live, { bottom: bottom + 64 + 8 }]} /> : null}
+      {/* Just above the tabs: Listen while it runs (Live shows it all itself), else Speak for me. */}
+      {listening ? (
+        current !== 'live' && liveKey ? <LiveBar onOpen={() => navigateToTab(liveKey)} style={above} /> : null
+      ) : speaking ? (
+        <SpeakBar onOpen={() => router.push('/player')} style={above} />
+      ) : null}
     <View
       style={[
         styles.bar,
