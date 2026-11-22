@@ -1,5 +1,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import type { Files } from './files';
+import { pathQueue } from './path-queue';
+
+const queue = pathQueue();
 
 /** Voxa's folder in the app's private documents (not visible to other apps, kept across updates). */
 const ROOT = 'voxa';
@@ -20,22 +23,25 @@ export const deviceFiles: Files = {
     const f = fileAt(path);
     return f.exists ? f.text() : null;
   },
-  async write(path, text) {
-    const f = fileAt(path);
-    ensureParent(f);
-    // Write a copy, then swap it in, so a crash mid-write never leaves half a file.
-    const tmp = new File(f.parentDirectory, `${f.name}.tmp`);
-    if (tmp.exists) tmp.delete();
-    tmp.create();
-    tmp.write(text);
-    if (f.exists) f.delete();
-    tmp.rename(f.name);
+  write(path, text) {
+    return queue(path, async () => {
+      const f = fileAt(path);
+      ensureParent(f);
+      // Write a copy, then swap it in, so a crash mid-write never leaves half a file.
+      // write() is asynchronous and creates the file itself: wait for it before the swap.
+      const tmp = new File(f.parentDirectory, `${f.name}.tmp`);
+      if (tmp.exists) tmp.delete();
+      await tmp.write(text);
+      if (f.exists) f.delete();
+      tmp.rename(f.name);
+    });
   },
-  async append(path, text) {
-    const f = fileAt(path);
-    ensureParent(f);
-    if (!f.exists) f.create();
-    f.write(text, { append: true });
+  append(path, text) {
+    return queue(path, async () => {
+      const f = fileAt(path);
+      ensureParent(f);
+      await f.write(text, { append: true });
+    });
   },
   async list(dir) {
     const d = new Directory(Paths.document, ...parts(dir));
