@@ -176,6 +176,10 @@ type VoxaEngineNative = {
   /** Which engine models are ready (bundled in the app or downloaded as packs). Builds from 22 Nov 2026. */
   modelStatus?(): { listen: boolean; speakers: boolean; bundledListen: boolean; bundledSpeakers: boolean };
   networkInfo?(): { connected: boolean; unmetered: boolean };
+  /** unrestricted: Android's battery optimisation is off for Voxa. Builds from 23 Nov 2026. */
+  batteryStatus?(): { unrestricted: boolean };
+  /** Opens battery settings; false when the phone has no such screen. Builds from 23 Nov 2026. */
+  openBatterySettings?(which: 'optimisation' | 'app'): boolean;
   /**
    * Donate your voice: records the microphone to a 16 kHz 16-bit mono WAV at `path` (inside the
    * app's files folder). Loudness arrives as onRecord. Builds from 23 Nov 2026.

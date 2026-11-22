@@ -13,6 +13,8 @@ import { useEngines } from '@/engines/provider';
 import { useListen } from '@/features/listen/listen-session';
 import { useModels } from '@/features/packs/models';
 import { usePrefs } from '@/features/settings/prefs';
+import { shouldShowTip } from '@/features/settings/battery-guide';
+import { useBattery } from '@/features/settings/use-battery';
 import { formatClock } from '@/features/listen/format';
 import type { TranscriptSegment } from '@/engines/types';
 import type { Mark } from '@/storage/sessions';
@@ -88,12 +90,41 @@ function Ready() {
 
       {l.error ? <Text style={[type.callout, { color: colors.accentText }]}>{l.error}</Text> : null}
 
+      <BatteryTip />
+
       <View style={[styles.tips, { backgroundColor: colors.card }]}>
         <Tip icon="flag" text="Tap Mark at an important moment to find it later." />
         <Tip icon="person" text="Speakers are labelled after the meeting ends." />
         <Tip icon="lock" text="Audio never leaves the phone and is deleted once speakers are labelled." />
       </View>
     </Screen>
+  );
+}
+
+/** Battery savers on many Android brands end Listen when the screen goes off: say how to stop it. */
+function BatteryTip() {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const battery = useBattery();
+  const { prefs, update } = usePrefs();
+  if (!shouldShowTip({ android: battery.android, unrestricted: battery.unrestricted, strict: battery.guide.strict, dismissed: prefs.batteryTipDismissed })) return null;
+  return (
+    <View style={[styles.banner, { backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/battery')} style={{ flex: 1, gap: 2 }}>
+        <Text style={[type.bodyStrong, { color: colors.text }]}>Keep listening with the screen off</Text>
+        <Text style={[type.caption, { color: colors.textSecondary }]}>
+          Your phone’s battery saver may stop Voxa mid-meeting. Tap to see the two-minute fix.
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Hide this tip"
+        onPress={() => update({ batteryTipDismissed: true })}
+        style={{ width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Icon name="close" size={18} color={colors.textTertiary} />
+      </Pressable>
+    </View>
   );
 }
 

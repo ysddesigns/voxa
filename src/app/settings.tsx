@@ -102,6 +102,7 @@ export default function SettingsScreen() {
             value={prefs.readCaptions}
             onChange={(v) => update({ readCaptions: v })}
           />
+          {Platform.OS === 'android' ? <Row label="Keep listening with the screen off" onPress={() => router.push('/battery')} /> : null}
           {Platform.OS === 'android' ? (
             <Toggle
               label="Show captions in the notification"
@@ -179,10 +180,7 @@ export default function SettingsScreen() {
               router.replace('/welcome');
             }}
           />
-          <Text style={[type.caption, { color: colors.textTertiary }]}>
-            Built with open models: sherpa-onnx (Apache-2.0), Zipformer (Apache-2.0), Piper voice trained on LJ Speech (public domain), Silero VAD (MIT), pyannote (MIT),
-            3D-Speaker (Apache-2.0), CMUdict, and Google ML Kit text recognition.
-          </Text>
+          <Row label="Open-source licences" onPress={() => router.push('/licences')} />
         </Section>
       </ScrollView>
     </View>

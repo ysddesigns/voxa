@@ -456,6 +456,30 @@ class VoxaEngineModule : Module() {
       mapOf("connected" to connected, "unmetered" to unmetered)
     }
 
+    // Battery: whether Android's own battery optimisation is off for Voxa (it can stop Listen with
+    // the screen off). Brand battery savers (Tecno, Infinix, itel, Xiaomi...) are not visible here.
+    Function("batteryStatus") {
+      val power = context.getSystemService(PowerManager::class.java)
+      mapOf("unrestricted" to (power?.isIgnoringBatteryOptimizations(context.packageName) ?: false))
+    }
+
+    // Opens the phone's battery settings: "optimisation" = the list of apps Android optimises,
+    // "app" = Voxa's own App info page (where most brands put their battery switches).
+    Function("openBatterySettings") { which: String ->
+      val intents = buildList {
+        if (which == "optimisation") add(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        add(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null)))
+      }
+      intents.any { intent ->
+        try {
+          context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          true
+        } catch (e: Exception) {
+          false
+        }
+      }
+    }
+
     // Scan text from an image (file:// or content:// uri). Lines top to bottom.
     AsyncFunction("recognizeText") { uri: String, promise: Promise ->
       thread(name = "voxa-scan") {

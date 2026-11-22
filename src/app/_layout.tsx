@@ -35,6 +35,8 @@ function Root() {
         <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="donate" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="licences" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="battery" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="welcome" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen

@@ -18,9 +18,11 @@ export type Prefs = {
   readCaptions: boolean;
   /** Put the latest sentence in the Listen notification (Android). Never shown on the lock screen. */
   noticeCaptions: boolean;
+  /** Closed the Live screen tip about battery savers stopping Listen (Android). */
+  batteryTipDismissed: boolean;
 };
 
-export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false, readCaptions: false, noticeCaptions: false };
+export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false, readCaptions: false, noticeCaptions: false, batteryTipDismissed: false };
 
 const PATH = 'prefs.json';
 const THEMES: readonly ThemePref[] = ['system', 'light', 'dark'];
@@ -43,6 +45,7 @@ export function parsePrefs(text: string | null): Prefs {
     onboarded: bool('onboarded'),
     readCaptions: bool('readCaptions'),
     noticeCaptions: bool('noticeCaptions'),
+    batteryTipDismissed: bool('batteryTipDismissed'),
   };
 }
 
