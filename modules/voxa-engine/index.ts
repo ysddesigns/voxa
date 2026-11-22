@@ -123,6 +123,17 @@ type VoxaEngineNative = {
     /** "" for the built-in voice, or an installed voice pack's id. */
     voice: string,
   ): void;
+  /** speak, following a plan of pieces (style, emphasis, pauses). Builds from 23 Nov 2026. */
+  speakPlanned?(
+    id: number,
+    text: string,
+    sid: number,
+    speed: number,
+    overrides: Record<string, string>,
+    fallbacks: Record<string, string>,
+    voice: string,
+    plan: { start: number; end: number; speed: number; gain: number; pauseMs: number; gapMs: number }[],
+  ): void;
   stopSpeaking(): void;
   /** "room" = loudspeaker, "private" = earbuds or earpiece. Builds from 22 Nov 2026. */
   setOutput?(mode: 'room' | 'private'): void;

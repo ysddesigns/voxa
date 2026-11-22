@@ -21,7 +21,11 @@ export type SpeakOptions = {
   rate?: number;
   /** "room" = phone speaker, "private" = earbuds (PRD LV-1). */
   output?: 'room' | 'private';
+  /** How to read each stretch of the text: style, emphasis and pauses (features/speak/script.ts). */
+  pieces?: SpeakPiece[];
 };
+
+export type SpeakPiece = { start: number; end: number; speed: number; gain: number; pauseMs: number; gapMs: number };
 
 export type SpeakEvent =
   | { type: 'start' }

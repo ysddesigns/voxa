@@ -3,7 +3,7 @@
     "name": "Voxa",
     "slug": "voxa",
     "scheme": "voxa",
-    "version": "0.1.0",
+    "version": "0.1.12",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

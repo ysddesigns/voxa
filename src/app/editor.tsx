@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon } from '@/components/icons';
+import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
 import { VoiceAvatar } from '@/components/voice-avatar';
 import { useTheme } from '@/design/theme';
@@ -10,6 +10,7 @@ import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
 import { durationMs, formatSpeed, formatTime } from '@/features/speak/playback';
 import { useSpeakSession } from '@/features/speak/speak-session';
+import { insertPause, sayAsKey, sayAsWordAt, STYLE_LABEL, toggleEmphasis, type Selection } from '@/features/speak/script';
 import { useVoices } from '@/features/voices/voices-store';
 
 /** Speak for me: script editor with a live preview bar (canvas "Editor"). */
@@ -32,6 +33,30 @@ export default function Editor() {
   const hasText = s.words.length > 0;
   const showingPlayback = s.status !== 'idle';
   const current = s.words[s.wordIndex];
+  const [sel, setSel] = useState<Selection>({ start: 0, end: 0 });
+  // Set only right after a toolbar edit; a cursor controlled all the time jumps while typing on Android.
+  const [forcedSel, setForcedSel] = useState<Selection | undefined>(undefined);
+  const [hint, setHint] = useState<string | null>(null);
+  const [sayAsWord, setSayAsWord] = useState<string | null>(null);
+
+  const apply = (edit: { text: string; selection: Selection } | null, why: string) => {
+    if (!edit) {
+      setHint(why);
+      return;
+    }
+    setHint(null);
+    s.setText(edit.text);
+    setSel(edit.selection);
+    setForcedSel(edit.selection);
+  };
+  const openSayAs = () => {
+    const word = sayAsWordAt(s.text, sel);
+    if (!word) setHint('Tap a word in the script first, then Say as.');
+    else {
+      setHint(null);
+      setSayAsWord(word);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -89,6 +114,31 @@ export default function Editor() {
           </Pressable>
         </View>
 
+        {!showingPlayback ? (
+          <View style={{ gap: 6 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.tools}>
+              <Tool
+                icon="pause"
+                label="Pause"
+                hint="Adds a short pause at the cursor. Press and hold for a long pause."
+                onPress={() => apply(insertPause(s.text, sel), '')}
+                onLongPress={() => apply(insertPause(s.text, sel, true), '')}
+              />
+              <Tool
+                icon="sparkle"
+                label="Emphasis"
+                hint="Stresses the word at the cursor, or the selected words. Tap again to remove."
+                onPress={() => apply(toggleEmphasis(s.text, sel), 'Tap a word or select some words first, then Emphasis.')}
+              />
+              <Tool icon="speaker" label="Say as" hint="Tells Voxa how to say the word at the cursor" onPress={openSayAs} />
+              <Tool icon="wave" label={`Style: ${STYLE_LABEL[s.style]}`} hint="Changes the reading style: Neutral, Warm, Upbeat or Slow" onPress={s.cycleStyle} />
+            </ScrollView>
+            <Text style={[type.caption, { color: hint ? colors.accentText : colors.textTertiary, paddingHorizontal: 4 }]} accessibilityLiveRegion="polite">
+              {hint || 'Write *word* to stress it, and [pause] for a pause.'}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={[styles.sheet, { backgroundColor: colors.card }]}>
           {showingPlayback && current ? (
             <Pressable
@@ -106,6 +156,11 @@ export default function Editor() {
             <TextInput
               value={s.text}
               onChangeText={s.setText}
+              selection={forcedSel}
+              onSelectionChange={(e) => {
+                setSel(e.nativeEvent.selection);
+                setForcedSel(undefined);
+              }}
               placeholder="Type what you want to say"
               placeholderTextColor={colors.textTertiary}
               multiline
@@ -165,7 +220,91 @@ export default function Editor() {
           </View>
         </View>
       </View>
+
+      <SayAsSheet word={sayAsWord} onClose={() => setSayAsWord(null)} />
     </KeyboardAvoidingView>
+  );
+}
+
+function Tool({ icon, label, hint, onPress, onLongPress }: { icon: IconName; label: string; hint: string; onPress: () => void; onLongPress?: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      style={({ pressed }) => [styles.tool, { backgroundColor: pressed ? colors.chipPressed : colors.card }]}
+    >
+      <Icon name={icon} size={16} color={colors.text} />
+      <Text style={[type.callout, { color: colors.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** "Say as": how Voxa should say a word, saved for every script and quick phrase. */
+function SayAsSheet({ word, onClose }: { word: string | null; onClose: () => void }) {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const s = useSpeakSession();
+  const saved = word ? s.sayAs[sayAsKey(word)] : undefined;
+  const [sound, setSound] = useState('');
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  // Fill the box when the sheet opens for a word.
+  if (word !== shownFor) {
+    setShownFor(word);
+    setSound(saved ?? '');
+  }
+  const save = async (value: string) => {
+    if (word) await s.setSayAs(word, value);
+    onClose();
+  };
+  return (
+    <Modal visible={!!word} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button" />
+        <View style={[styles.sayAs, { backgroundColor: colors.card, paddingBottom: insets.bottom + 16 }]}>
+          <Text style={[type.heading, { color: colors.text }]} accessibilityRole="header">
+            How should Voxa say “{word}”?
+          </Text>
+          <Text style={[type.callout, { color: colors.textSecondary }]}>
+            Write it the way it sounds, with hyphens between parts. For example Nnamdi → Nahm-dee, NEPA → nee-pah.
+          </Text>
+          <TextInput
+            value={sound}
+            onChangeText={setSound}
+            placeholder="Sounds like…"
+            placeholderTextColor={colors.textTertiary}
+            autoFocus
+            autoCorrect={false}
+            accessibilityLabel={`How to say ${word ?? ''}`}
+            style={[type.body, styles.sayAsInput, { color: colors.text, backgroundColor: colors.chip }]}
+          />
+          <View style={styles.sayAsActions}>
+            <SheetButton label="Try it" onPress={() => s.trySound(sound || word || '')} />
+            {saved ? <SheetButton label="Remove" onPress={() => void save('')} /> : null}
+            <SheetButton label="Save" primary disabled={!sound.trim()} onPress={() => void save(sound)} />
+          </View>
+          <Text style={[type.caption, { color: colors.textTertiary }]}>Saved on this phone and used everywhere Voxa speaks.</Text>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function SheetButton({ label, onPress, primary, disabled }: { label: string; onPress: () => void; primary?: boolean; disabled?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [styles.sheetButton, { backgroundColor: primary ? colors.primaryFill : colors.chip, opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}
+    >
+      <Text style={[type.callout, { color: primary ? colors.onPrimary : colors.text }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -200,5 +339,11 @@ const styles = StyleSheet.create({
   },
   previewPlay: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   times: { flexDirection: 'row', justifyContent: 'space-between' },
+  tools: { gap: 8, paddingHorizontal: 2 },
+  tool: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: minTouch, borderRadius: radius.pill, paddingHorizontal: 14 },
+  sayAs: { borderTopLeftRadius: radius.hero, borderTopRightRadius: radius.hero, padding: 20, gap: 12 },
+  sayAsInput: { minHeight: minTouch + 4, borderRadius: radius.icon, paddingHorizontal: 14 },
+  sayAsActions: { flexDirection: 'row', gap: 8 },
+  sheetButton: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', minHeight: minTouch + 4, borderRadius: radius.pill, paddingHorizontal: 16 },
   tabular: { fontVariant: ['tabular-nums'] },
 });

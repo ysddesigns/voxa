@@ -8,12 +8,13 @@ import {
   durationMs,
   msPerWord,
   nextSpeed,
-  tokenize,
   wordAtChar,
   wordAtFraction,
   wordsForSeconds,
   type Word,
 } from './playback';
+import { sayAsStore } from '@/storage';
+import { parseScript, planFrom, scriptWords, styleSpeed, STYLES, type SayAs, type Style } from './script';
 
 /**
  * One "Speak for me" script shared by the Editor and the Player: its text,
@@ -51,6 +52,15 @@ type SpeakValue = {
   saying: string | null;
   /** Discreet mode: earbuds or earpiece, never the loudspeaker. */
   output: 'room' | 'private';
+  /** Reading style for the whole script (PRD ED-2). */
+  style: Style;
+  cycleStyle: () => void;
+  /** "Say as" dictionary (PRD ED-3), saved on the phone. */
+  sayAs: SayAs;
+  /** Sets how a word is said; an empty sound removes it. */
+  setSayAs: (word: string, sound: string) => Promise<void>;
+  /** Speaks a word as the dictionary entry would, for trying a "Say as" sound. */
+  trySound: (sound: string) => void;
 };
 
 const SpeakContext = createContext<SpeakValue | null>(null);
@@ -76,7 +86,20 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const { prefs } = usePrefs();
   const output = prefs.discreet ? 'private' : 'room';
 
-  const words = useMemo(() => tokenize(text), [text]);
+  const [style, setStyle] = useState<Style>('neutral');
+  const [sayAs, setSayAsState] = useState<SayAs>({});
+  useEffect(() => {
+    let alive = true;
+    sayAsStore
+      .load()
+      .then((d) => alive && setSayAsState(d))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const parsed = useMemo(() => parseScript(text, style, sayAs), [text, style, sayAs]);
+  const words = useMemo(() => scriptWords(text, parsed.markers), [text, parsed.markers]);
   const handle = useRef<SpeakHandle | null>(null);
   const generation = useRef(0);
   // A picked voice may belong to the other engine (mock vs device); fall back to the default.
@@ -96,14 +119,14 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       halt();
       if (words.length === 0) return;
       const start = clampIndex(from, words.length);
-      const offset = words[start].start;
+      const plan = planFrom(parsed, start === 0 ? 0 : words[start].start);
       const gen = generation.current;
       setWordIndex(start);
       setError(null);
       setStatus('playing');
-      handle.current = engine.speak(text.slice(offset), { voiceId: withVoice, rate: atRate, output }, (e) => {
+      handle.current = engine.speak(plan.spoken, { voiceId: withVoice, rate: atRate, output, pieces: plan.pieces }, (e) => {
         if (gen !== generation.current) return;
-        if (e.type === 'word') setWordIndex(wordAtChar(words, e.charStart + offset));
+        if (e.type === 'word') setWordIndex(wordAtChar(words, plan.toOriginal(e.charStart)));
         if (e.type === 'error') {
           console.warn('Voxa speak failed:', e.message);
           setError(e.message);
@@ -115,7 +138,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [engine, halt, words, text, rate, effectiveVoice, output],
+    [engine, halt, words, parsed, rate, effectiveVoice, output],
   );
 
   const say = useCallback(
@@ -127,7 +150,8 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       const gen = generation.current;
       setError(null);
       setSaying(phrase);
-      handle.current = engine.speak(phrase, { voiceId: effectiveVoice, rate, output }, (e) => {
+      const p = parseScript(phrase, 'neutral', sayAs);
+      handle.current = engine.speak(p.spoken, { voiceId: effectiveVoice, rate, output, pieces: p.pieces }, (e) => {
         if (gen !== generation.current) return;
         if (e.type === 'error') setError(e.message);
         if (e.type === 'end' || e.type === 'error') {
@@ -136,8 +160,22 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [engine, halt, saying, status, effectiveVoice, rate, output],
+    [engine, halt, saying, status, effectiveVoice, rate, output, sayAs],
   );
+
+  const trySound = useCallback(
+    (sound: string) => {
+      halt();
+      if (status !== 'idle') setStatus('paused');
+      if (!sound.trim()) return;
+      handle.current = engine.speak(sound, { voiceId: effectiveVoice, rate, output }, () => {});
+    },
+    [engine, halt, status, effectiveVoice, rate, output],
+  );
+
+  const setSayAs = useCallback(async (word: string, sound: string) => {
+    setSayAsState(await sayAsStore.set(word, sound));
+  }, []);
 
   const pause = useCallback(() => {
     if (status !== 'playing') return;
@@ -203,8 +241,14 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     [status, stop],
   );
 
-  const total = durationMs(words.length, rate);
-  const position = status === 'idle' ? 0 : Math.round(wordIndex * msPerWord(rate));
+  const cycleStyle = useCallback(() => {
+    if (status !== 'idle') stop();
+    setStyle((s) => STYLES[(STYLES.indexOf(s) + 1) % STYLES.length]);
+  }, [status, stop]);
+
+  const pace = rate * styleSpeed(style);
+  const total = durationMs(words.length, pace) + parsed.pauseMs;
+  const position = status === 'idle' ? 0 : Math.min(total, Math.round(wordIndex * msPerWord(pace) + parsed.pauseMs * (wordIndex / Math.max(1, words.length))));
 
   const value: SpeakValue = {
     text,
@@ -229,6 +273,11 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
     say,
     saying,
     output,
+    style,
+    cycleStyle,
+    sayAs,
+    setSayAs,
+    trySound,
   };
 
   return <SpeakContext.Provider value={value}>{children}</SpeakContext.Provider>;

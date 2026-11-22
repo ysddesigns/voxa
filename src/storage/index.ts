@@ -1,4 +1,5 @@
 import { PhraseStore } from '@/features/phrases/phrases';
+import { SayAsStore } from '@/features/speak/say-as';
 import { deviceFiles } from './device-files';
 import { PrefsStore } from './prefs';
 import { SessionStore } from './sessions';
@@ -7,3 +8,4 @@ import { SessionStore } from './sessions';
 export const sessionStore = new SessionStore(deviceFiles, 'voxa');
 export const phraseStore = new PhraseStore(deviceFiles);
 export const prefsStore = new PrefsStore(deviceFiles);
+export const sayAsStore = new SayAsStore(deviceFiles);

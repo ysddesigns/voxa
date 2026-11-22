@@ -135,8 +135,11 @@ class VoxaEngineModule : Module() {
   @Volatile private var noticeActive = false
   @Volatile private var labelCancel = false
 
-  private class Sentence(val start: Int, val end: Int, val text: String)
-  private class Chunk(val start: Int, val end: Int, val samples: FloatArray)
+  private class Sentence(val start: Int, val end: Int, val text: String, val speed: Float = 1f, val gain: Float = 1f, val pauseMs: Int = 0)
+  /** How to read one stretch of the text (script refinements: style, emphasis, pauses). */
+  private class Piece(val start: Int, val end: Int, val speed: Float, val gain: Float, val pauseMs: Int, val gapMs: Int)
+  /** speechFrames: where the words' audio ends; silence for a pause follows it. */
+  private class Chunk(val start: Int, val end: Int, val samples: FloatArray, val speechFrames: Int = samples.size)
   private val endOfSpeech = Chunk(0, 0, FloatArray(0))
 
   override fun definition() = ModuleDefinition {
@@ -203,6 +206,26 @@ class VoxaEngineModule : Module() {
     Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String ->
       val gen = speakGen.incrementAndGet()
       thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice) }
+      Unit
+    }
+
+    // speak, following a plan: each piece {start, end, speed, gain, pauseMs, gapMs} of the text is
+    // read at speed × its speed and gain × loudness, then gapMs of silence after each sentence and
+    // pauseMs after the piece. Builds from 23 Nov 2026.
+    Function("speakPlanned") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String, plan: List<Map<String, Double>> ->
+      val pieces = plan.map { m ->
+        fun n(k: String) = m[k] ?: 0.0
+        Piece(
+          n("start").toInt().coerceIn(0, text.length),
+          n("end").toInt().coerceIn(0, text.length),
+          (m["speed"] ?: 1.0).toFloat().coerceIn(0.3f, 3f),
+          (m["gain"] ?: 1.0).toFloat().coerceIn(0f, 2f),
+          n("pauseMs").toInt().coerceIn(0, 10_000),
+          n("gapMs").toInt().coerceIn(0, 3_000),
+        )
+      }
+      val gen = speakGen.incrementAndGet()
+      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice, pieces) }
       Unit
     }
 
@@ -870,14 +893,44 @@ class VoxaEngineModule : Module() {
     return if (audio.samples.isEmpty()) null else audio
   }
 
-  private fun runSpeak(id: Int, gen: Int, text: String, sid: Int, speed: Float, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String) {
+  /** The sentences of each piece, carrying its speed and loudness; silence after as the plan says. */
+  private fun plannedSentences(text: String, pieces: List<Piece>): List<Sentence> {
+    val out = ArrayList<Sentence>()
+    for (p in pieces) {
+      if (p.end < p.start) continue
+      val inPiece = splitSentences(text.substring(p.start, p.end))
+      if (inPiece.isEmpty()) {
+        if (p.pauseMs > 0) out.add(Sentence(p.start, p.start, "", pauseMs = p.pauseMs))
+        continue
+      }
+      inPiece.forEachIndexed { i, s ->
+        val last = i == inPiece.size - 1
+        val ends = s.text.trimEnd().lastOrNull()?.let { it in ".!?" } ?: false
+        val gap = if (ends) p.gapMs else 0
+        out.add(Sentence(p.start + s.start, p.start + s.end, s.text, p.speed, p.gain, gap + if (last) p.pauseMs else 0))
+      }
+    }
+    return out
+  }
+
+  private fun runSpeak(
+    id: Int,
+    gen: Int,
+    text: String,
+    sid: Int,
+    speed: Float,
+    overrides: Map<String, String>,
+    fallbacks: Map<String, String>,
+    voice: String,
+    pieces: List<Piece>? = null,
+  ) {
     fun live() = speakGen.get() == gen
     var private = false
     try {
       val engine = ensureTts(voice)
       if (!live()) return
       val words = WORD.findAll(text).toList()
-      val sentences = splitSentences(text)
+      val sentences = if (pieces != null) plannedSentences(text, pieces) else splitSentences(text)
       emitSpeak(id, "start")
       if (sentences.isEmpty()) { emitSpeak(id, "end"); return }
 
@@ -913,13 +966,16 @@ class VoxaEngineModule : Module() {
       val skipped = LinkedHashSet<String>()
       for (s in sentences) {
         if (!live()) break
-        val audio = synth(engine, s.text, sid, speed, overrides, fallbacks, skipped, alive = ::live)
+        val audio = if (s.text.isBlank()) null else synth(engine, s.text, sid, speed * s.speed, overrides, fallbacks, skipped, alive = ::live)
         if (first) {
           first = false
           emitSpeak(id, "metrics", mapOf("firstAudioMs" to (SystemClock.elapsedRealtime() - t0).toDouble()))
         }
         // A piece with no speakable words still goes to the player so its words are passed over.
-        val chunk = Chunk(s.start, s.end, audio?.samples ?: FloatArray(0))
+        val speech = audio?.samples ?: FloatArray(0)
+        if (s.gain != 1f) for (i in speech.indices) speech[i] = (speech[i] * s.gain).coerceIn(-1f, 1f)
+        val silence = (s.pauseMs.toLong() * rate / 1000).toInt()
+        val chunk = if (silence > 0) Chunk(s.start, s.end, speech.copyOf(speech.size + silence), speech.size) else Chunk(s.start, s.end, speech)
         while (live() && !queue.offer(chunk, 50, TimeUnit.MILLISECONDS)) { /* wait for the player */ }
       }
       if (skipped.isNotEmpty()) {
@@ -1000,7 +1056,7 @@ class VoxaEngineModule : Module() {
         val total = inChunk.sumOf { words[it].value.length + 1 }.coerceAtLeast(1)
         var acc = 0
         for (wi in inChunk) {
-          marks.add(written + acc.toLong() * samples.size / total to wi)
+          marks.add(written + acc.toLong() * chunk.speechFrames / total to wi)
           acc += words[wi].value.length + 1
         }
         var off = 0
