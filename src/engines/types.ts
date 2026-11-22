@@ -92,6 +92,8 @@ export type SpeakerTurn = { startMs: number; endMs: number; speaker: number };
 
 export interface SpeechEngine {
   start(onEvent: (e: ListenEvent) => void, options?: ListenOptions): Promise<ListenSession>;
+  /** Loads the listening model in the background so start() is quick. Errors are ignored: start() reports them. */
+  warmUp?(): void;
   /** Present when this engine can find who spoke when in a recording made with audioPath. */
   labelSpeakers?(audioPath: string, onProgress?: (fraction: number) => void): { cancel(): void; done: Promise<SpeakerTurn[]> };
 }

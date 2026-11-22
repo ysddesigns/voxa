@@ -94,7 +94,20 @@ export type ListenAction = 'pause' | 'resume' | 'mark' | 'stop';
 
 export type NativeSpeakerTurn = { startMs: number; endMs: number; speaker: number };
 
-export type NativePackFile = { path: string; url: string; sha256: string; bytes: number };
+/** One listening model's run in compareAsr; error instead of the numbers when it could not run. */
+export type NativeAsrCompareResult = {
+  id: string;
+  audioSec: number;
+  text?: string;
+  rtf?: number;
+  loadMs?: number;
+  memMb?: number;
+  /** Whole-sentence models: how many VAD sentences were decoded. */
+  sentences?: number;
+  error?: string;
+};
+
+export type NativePackFile ={ path: string; url: string; sha256: string; bytes: number };
 
 type VoxaEngineNative = {
   /** voice: "" for the built-in voice or a voice pack id. Does not replace a voice already loaded. */
@@ -121,6 +134,8 @@ type VoxaEngineNative = {
   startListening(audioPath: string): Promise<{ loadMs: number }>;
   /** Builds with labelSpeakers resolve with the audio this run heard; older ones with null. */
   stopListening(): Promise<{ heardMs: number } | null>;
+  /** Loads the listening model ahead of startListening. Builds from 22 Nov 2026. */
+  loadListen?(): Promise<{ loadMs: number }>;
   /**
    * The Listen notification (Android's Live Activity): timer, listening or paused, Pause/Resume,
    * Mark and Stop buttons (sent back as onListenAction), and an optional latest sentence that never
@@ -133,6 +148,15 @@ type VoxaEngineNative = {
   labelSpeakers?(audioPath: string): Promise<NativeSpeakerTurn[]>;
   cancelLabel?(): void;
   benchmark(): Promise<BenchmarkResult>;
+  /**
+   * Runs listening models on one recording (16 kHz 16-bit PCM inside the app's files folder) and
+   * reports each model's text, speed (RTF), load time and added memory. Builds from 22 Nov 2026.
+   */
+  compareAsr?(
+    audioPath: string,
+    /** engine: "online" (default), or "moonshine" / "omnilingual" for whole-sentence models (builds from 23 Nov 2026). */
+    candidates: { id: string; modelType?: string; engine?: string }[],
+  ): Promise<NativeAsrCompareResult[]>;
   /** Scan text (ML Kit, offline). Builds from 22 Nov 2026. */
   recognizeText?(uri: string): Promise<NativeScanLine[]>;
   /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */
@@ -152,7 +176,16 @@ type VoxaEngineNative = {
   /** Which engine models are ready (bundled in the app or downloaded as packs). Builds from 22 Nov 2026. */
   modelStatus?(): { listen: boolean; speakers: boolean; bundledListen: boolean; bundledSpeakers: boolean };
   networkInfo?(): { connected: boolean; unmetered: boolean };
+  /**
+   * Donate your voice: records the microphone to a 16 kHz 16-bit mono WAV at `path` (inside the
+   * app's files folder). Loudness arrives as onRecord. Builds from 23 Nov 2026.
+   */
+  startRecording?(path: string): Promise<void>;
+  stopRecording?(): Promise<{ durationMs: number }>;
+  /** Zips a folder inside the app's files folder into `dest`. Builds from 23 Nov 2026. */
+  zipFolder?(src: string, dest: string): Promise<{ bytes: number }>;
   release(): void;
+  addListener(event: 'onRecord', listener: (e: { rms: number }) => void): EventSubscription;
   addListener(event: 'onLabel', listener: (e: { fraction: number }) => void): EventSubscription;
   addListener(event: 'onPack', listener: (e: NativePackEvent) => void): EventSubscription;
   addListener(event: 'onSpeak', listener: (e: NativeSpeakEvent) => void): EventSubscription;

@@ -9,7 +9,7 @@ import { nativeLabelSpeakers, startNativeListen } from './listen';
 
 /**
  * On-device engines backed by modules/voxa-engine (sherpa-onnx). Android only for now:
- * voice = Piper LJSpeech medium (chosen in Phase 0), speech = streaming Zipformer 20M. scan = ML Kit Latin (bundled), summary = quick summary in TypeScript.
+ * voice = Piper LJSpeech medium (chosen in Phase 0), speech = streaming Kroko English (Zipformer). scan = ML Kit Latin (bundled), summary = quick summary in TypeScript.
  */
 
 const VOICE_PREFIX = 'device-';
@@ -144,6 +144,7 @@ export function getNativeEngines(): Engines | null {
 
     speech: {
       start: (onEvent: (e: ListenEvent) => void, options?: ListenOptions) => startNativeListen(native, onEvent, options),
+      ...(native.loadListen ? { warmUp: () => void native.loadListen!().catch(() => {}) } : {}),
       ...(native.labelSpeakers
         ? { labelSpeakers: (audioPath: string, onProgress?: (f: number) => void) => nativeLabelSpeakers(native, audioPath, onProgress) }
         : {}),

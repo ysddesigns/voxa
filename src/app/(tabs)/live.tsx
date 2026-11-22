@@ -9,6 +9,7 @@ import { announce, useScreenReader } from '@/design/a11y';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
+import { useEngines } from '@/engines/provider';
 import { useListen } from '@/features/listen/listen-session';
 import { useModels } from '@/features/packs/models';
 import { usePrefs } from '@/features/settings/prefs';
@@ -32,6 +33,12 @@ function Ready() {
   const router = useRouter();
   const l = useListen();
   const models = useModels();
+  const { speech } = useEngines();
+  // The listening model takes several seconds to load: start now so tapping Listen is quick.
+  const listenReady = models.ready.listen;
+  useEffect(() => {
+    if (listenReady) speech.warmUp?.();
+  }, [listenReady, speech]);
   return (
     <Screen title="Live" overline="Listen">
       {l.recovered.length > 0 ? (

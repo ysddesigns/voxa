@@ -161,6 +161,13 @@ export default function SettingsScreen() {
           </Text>
         </Section>
 
+        <Section title="Help Voxa">
+          <Row label="Donate your voice" onPress={() => router.push('/donate')} />
+          <Text style={[type.caption, { color: colors.textTertiary }]}>
+            Read short sentences aloud so Voxa learns to understand Nigerian voices. Nothing is sent unless you share it.
+          </Text>
+        </Section>
+
         <Section title="About">
           <Info label="Version" value={Constants.expoConfig?.version ?? 'dev'} />
           <Info label="This phone" value={`${TIER_LABEL[tier]} models`} />

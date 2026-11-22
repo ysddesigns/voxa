@@ -22,6 +22,11 @@ import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.GeneratedAudio
 import com.k2fsa.sherpa.onnx.GenerationConfig
+import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKittenModelConfig
@@ -69,7 +74,10 @@ private const val MAX_WORDS = 20
 private val TTS_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 private const val LONG_TEST_FILE = "long-test.jsonl"
 /** Model packs (src/features/packs/catalogue.ts): listening (ASR + VAD) and speaker labels. */
-private const val LISTEN_PACK = "listen-en"
+/** Kroko English (chosen 22 Nov 2026 over Zipformer 20M, which was "listen-en": deleted on first use). */
+private const val LISTEN_PACK = "listen-en-kroko"
+/** Packs no catalogue lists any more: the old listening model, and Kroko's lab copy (now LISTEN_PACK). */
+private val OLD_PACKS = listOf("listen-en", "lab-asr-kroko")
 private const val SPEAKERS_PACK = "speakers"
 /** Clustering threshold for meetings: 0.5 found 7 speakers in a 4-speaker clip, so start higher. Tune on real meetings. */
 private const val LABEL_THRESHOLD = 0.6f
@@ -84,7 +92,7 @@ private val SENTENCE = Regex("[^.!?\\n]+[.!?]*")
  *    with AudioTrack. Text becomes voice tokens in KittenTokenizer: English words from the lexicon,
  *    other words from pronunciations the app passes in (Nigerian spelling rules). Word events are
  *    estimated from each piece's audio length, weighted by word length.
- *  - listen: streaming Zipformer 20M (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input,
+ *  - listen: streaming Kroko English, a Zipformer (sherpa-onnx OnlineRecognizer) on 16 kHz AudioRecord input,
  *    run only while Silero VAD hears speech (GatedRecognizer). Finished sentences get punctuation
  *    and capitals from a small CNN-BiLSTM model; in-progress text stays as the recognizer wrote it.
  *  - benchmark: load time, real-time factor, first-audio latency and memory, for the voice,
@@ -115,6 +123,7 @@ class VoxaEngineModule : Module() {
   @Volatile private var privateOutput = false
   @Volatile private var longTestRunning = false
   private val packs by lazy { PackStore(context) }
+  private val recorder by lazy { VoiceRecorder { rms -> sendEvent("onRecord", mapOf("rms" to rms)) } }
   private val scanner by lazy { TextScanner(context) }
   /** Pack id → cancel requested, for installs in progress. */
   private val packCancels = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -132,7 +141,7 @@ class VoxaEngineModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("VoxaEngine")
-    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction")
+    Events("onSpeak", "onListen", "onLongTest", "onPack", "onLabel", "onListenAction", "onRecord")
 
     // Notification buttons (Pause, Resume, Mark, Stop) go to the app, which does the work and
     // sends the new state back with showListenNotice.
@@ -157,6 +166,21 @@ class VoxaEngineModule : Module() {
       noticeActive = false
       if (!listening) ListenService.stop(context)
       Unit
+    }
+
+    // Loads the listening model in the background (Kroko takes ~12 s on a mid-range phone), so
+    // tapping Listen starts at once. Also removes the old listening model's folder.
+    AsyncFunction("loadListen") { promise: Promise ->
+      thread(name = "voxa-asr-load") {
+        try {
+          for (old in OLD_PACKS) if (packs.installed().contains(old)) packs.delete(old)
+          ensureAsr()
+          promise.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
+        } catch (e: Throwable) {
+          Log.e(TAG, "listening model load failed", e)
+          promise.reject("E_ASR_LOAD", e.message ?: "Could not load the listening model", e)
+        }
+      }
     }
 
     // Warms up a voice ("" = built-in, else a pack id). Does not replace a voice already loaded,
@@ -242,6 +266,51 @@ class VoxaEngineModule : Module() {
     }
 
     // Resolves once the last sentence has been sent, with how much audio this run heard.
+    // Donate your voice: plain 16 kHz WAV recording, no speech model. Levels arrive as onRecord.
+    AsyncFunction("startRecording") { path: String, promise: Promise ->
+      val file = appFile(path)
+      when {
+        context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED ->
+          promise.reject("E_MIC_PERMISSION", "Microphone permission is not granted", null)
+        file == null -> promise.reject("E_PATH", "Bad audio path", null)
+        listening || longTestRunning -> promise.reject("E_BUSY", "Stop listening first", null)
+        recorder.isRecording -> promise.reject("E_BUSY", "Already recording", null)
+        else -> try {
+          recorder.start(file)
+          promise.resolve(null)
+        } catch (e: Throwable) {
+          promise.reject("E_RECORD", e.message ?: "Could not start recording", e)
+        }
+      }
+    }
+
+    AsyncFunction("stopRecording") { promise: Promise ->
+      thread(name = "voxa-donate-stop") {
+        try {
+          promise.resolve(mapOf("durationMs" to recorder.stop().toDouble()))
+        } catch (e: Throwable) {
+          promise.reject("E_RECORD", e.message ?: "Recording failed", e)
+        }
+      }
+    }
+
+    // Zips a folder inside the app's files (for sharing donated recordings).
+    AsyncFunction("zipFolder") { src: String, dest: String, promise: Promise ->
+      val from = appFile(src)
+      val to = appFile(dest)
+      if (from == null || to == null) {
+        promise.reject("E_PATH", "Bad path", null)
+      } else {
+        thread(name = "voxa-zip") {
+          try {
+            promise.resolve(mapOf("bytes" to VoiceRecorder.zipFolder(from, to).toDouble()))
+          } catch (e: Throwable) {
+            promise.reject("E_ZIP", e.message ?: "Could not make the file", e)
+          }
+        }
+      }
+    }
+
     AsyncFunction("stopListening") { promise: Promise ->
       listening = false
       val t = listenThread
@@ -280,6 +349,23 @@ class VoxaEngineModule : Module() {
     Function("cancelLabel") {
       labelCancel = true
       Unit
+    }
+
+    // Listening models on one recording (see runCompare). candidates: [{ id, modelType? }].
+    AsyncFunction("compareAsr") { audioPath: String, candidates: List<Map<String, String>>, promise: Promise ->
+      val audio = appFile(audioPath)
+      when {
+        audio == null || !audio.isFile -> promise.reject("E_PATH", "Record something first", null)
+        listening -> promise.reject("E_BUSY", "Stop listening first", null)
+        else -> thread(name = "voxa-asr-compare") {
+          try {
+            promise.resolve(runCompare(audio, candidates))
+          } catch (e: Throwable) {
+            Log.e(TAG, "compare failed", e)
+            promise.reject("E_COMPARE", e.message ?: "Comparison failed", e)
+          }
+        }
+      }
     }
 
     AsyncFunction("benchmark") { promise: Promise ->
@@ -469,25 +555,206 @@ class VoxaEngineModule : Module() {
     recognizer?.let { return it }
     val t0 = SystemClock.elapsedRealtime()
     val m = models(LISTEN_PACK, "asr", "encoder.onnx")
-    val config = OnlineRecognizerConfig(
-      featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80),
-      modelConfig = OnlineModelConfig(
-        transducer = OnlineTransducerModelConfig(
-          encoder = "${m.path}/encoder.onnx",
-          decoder = "${m.path}/decoder.onnx",
-          joiner = "${m.path}/joiner.onnx",
-        ),
-        tokens = "${m.path}/tokens.txt",
-        numThreads = 2,
-        provider = "cpu",
-      ),
-      enableEndpoint = true,
-      decodingMethod = "greedy_search",
-    )
-    val created = OnlineRecognizer(assetManager = m.assets, config = config)
+    val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true))
     asrLoadMs = SystemClock.elapsedRealtime() - t0
     recognizer = created
     created
+  }
+
+  /**
+   * A streaming transducer in a model folder holding encoder.onnx, decoder.onnx, joiner.onnx and
+   * tokens.txt. modelType "" lets sherpa-onnx tell the kind (Zipformer, NeMo) from the model itself.
+   */
+  private fun asrConfig(m: ModelDir, endpoint: Boolean, modelType: String = "") = OnlineRecognizerConfig(
+    featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80),
+    modelConfig = OnlineModelConfig(
+      transducer = OnlineTransducerModelConfig(
+        encoder = "${m.path}/encoder.onnx",
+        decoder = "${m.path}/decoder.onnx",
+        joiner = "${m.path}/joiner.onnx",
+      ),
+      tokens = "${m.path}/tokens.txt",
+      numThreads = 2,
+      provider = "cpu",
+      modelType = modelType,
+    ),
+    enableEndpoint = endpoint,
+    decodingMethod = "greedy_search",
+  )
+
+  /**
+   * Listening-model comparison (Engine lab): runs each candidate on the same recording, fed in
+   * 100 ms pieces as if live, and reports its text, speed, load time and memory. Candidates are
+   * the listening pack (the model the app uses now) and lab packs from the catalogue. One model
+   * is loaded at a time, and the live recognizer is freed first so memory figures are its own.
+   */
+  private fun runCompare(audio: File, candidates: List<Map<String, String>>): List<Map<String, Any>> {
+    val samples = readPcm(audio)
+    if (samples.size < ASR_RATE) throw IllegalStateException("The recording is shorter than a second")
+    val audioSec = samples.size.toDouble() / ASR_RATE
+    synchronized(lock) {
+      recognizer?.release()
+      recognizer = null
+    }
+    val step = ASR_RATE / 10
+    // Sentences for the offline models, cut once by the VAD (as the app would cut them while listening).
+    val sentences by lazy { vadSegments(samples) }
+    return candidates.map { c ->
+      val id = c["id"].orEmpty()
+      val engine = c["engine"].orEmpty().ifEmpty { "online" }
+      if (engine != "online") return@map runCompareOffline(id, engine, samples, audioSec) { sentences }
+      val out = linkedMapOf<String, Any>("id" to id, "audioSec" to audioSec)
+      var r: OnlineRecognizer? = null
+      try {
+        // Only the listening pack may fall back to the bundled model; a candidate must be its own download.
+        val m = when {
+          id == LISTEN_PACK -> models(id, "asr", "encoder.onnx")
+          hasPack(id, "encoder.onnx") -> ModelDir(null, packs.dir(id).path)
+          else -> throw MissingPack(id)
+        }
+        val before = pssMb()
+        var t0 = SystemClock.elapsedRealtime()
+        r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = false, modelType = c["modelType"].orEmpty()))
+        out["loadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+        out["memMb"] = pssMb() - before
+        val stream = r.createStream("")
+        t0 = SystemClock.elapsedRealtime()
+        var i = 0
+        while (i < samples.size) {
+          val end = minOf(i + step, samples.size)
+          stream.acceptWaveform(samples.copyOfRange(i, end), ASR_RATE)
+          while (r.isReady(stream)) r.decode(stream)
+          i = end
+        }
+        stream.acceptWaveform(FloatArray(ASR_RATE / 2), ASR_RATE)
+        stream.inputFinished()
+        while (r.isReady(stream)) r.decode(stream)
+        out["rtf"] = (SystemClock.elapsedRealtime() - t0) / 1000.0 / audioSec
+        out["text"] = r.getResult(stream).text.trim()
+        stream.release()
+      } catch (e: MissingPack) {
+        out["error"] = "Not downloaded"
+      } catch (e: Throwable) {
+        Log.e(TAG, "compare: $id failed", e)
+        out["error"] = e.message ?: e.toString()
+      } finally {
+        r?.release()
+      }
+      Log.i(TAG, "compare: $out")
+      out
+    }
+  }
+
+  /**
+   * An offline (whole-sentence) candidate: each VAD sentence is decoded once it has ended, which
+   * is how the app would use it after each sentence. RTF counts decoding only; memory is the
+   * largest rise seen while loading and decoding.
+   */
+  private fun runCompareOffline(
+    id: String,
+    engine: String,
+    samples: FloatArray,
+    audioSec: Double,
+    sentences: () -> List<FloatArray>,
+  ): Map<String, Any> {
+    val out = linkedMapOf<String, Any>("id" to id, "audioSec" to audioSec)
+    var r: OfflineRecognizer? = null
+    try {
+      val probe = when (engine) {
+        "moonshine" -> "encode.int8.onnx"
+        "omnilingual" -> "model.int8.onnx"
+        else -> throw IllegalArgumentException("Unknown engine $engine")
+      }
+      if (!hasPack(id, probe)) throw MissingPack(id)
+      val dir = packs.dir(id).path
+      val model = when (engine) {
+        "moonshine" -> OfflineModelConfig(
+          moonshine = OfflineMoonshineModelConfig(
+            preprocessor = "$dir/preprocess.onnx",
+            encoder = "$dir/encode.int8.onnx",
+            uncachedDecoder = "$dir/uncached_decode.int8.onnx",
+            cachedDecoder = "$dir/cached_decode.int8.onnx",
+          ),
+          tokens = "$dir/tokens.txt",
+          numThreads = 2,
+          provider = "cpu",
+        )
+        else -> OfflineModelConfig(
+          omnilingual = OfflineOmnilingualAsrCtcModelConfig(model = "$dir/model.int8.onnx"),
+          tokens = "$dir/tokens.txt",
+          numThreads = 2,
+          provider = "cpu",
+        )
+      }
+      val segs = sentences()
+      val before = pssMb()
+      var t0 = SystemClock.elapsedRealtime()
+      r = OfflineRecognizer(config = OfflineRecognizerConfig(featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80), modelConfig = model))
+      out["loadMs"] = (SystemClock.elapsedRealtime() - t0).toDouble()
+      var peak = pssMb() - before
+      val text = StringBuilder()
+      var decodeMs = 0L
+      for (seg in segs) {
+        val stream = r.createStream()
+        t0 = SystemClock.elapsedRealtime()
+        stream.acceptWaveform(seg, ASR_RATE)
+        r.decode(stream)
+        decodeMs += SystemClock.elapsedRealtime() - t0
+        val t = r.getResult(stream).text.trim()
+        if (t.isNotEmpty()) text.append(if (text.isEmpty()) "" else " ").append(t)
+        stream.release()
+        peak = maxOf(peak, pssMb() - before)
+      }
+      out["memMb"] = peak
+      out["rtf"] = decodeMs / 1000.0 / audioSec
+      out["text"] = text.toString()
+      out["sentences"] = segs.size
+    } catch (e: MissingPack) {
+      out["error"] = "Not downloaded"
+    } catch (e: Throwable) {
+      Log.e(TAG, "compare: $id failed", e)
+      out["error"] = e.message ?: e.toString()
+    } finally {
+      r?.release()
+    }
+    Log.i(TAG, "compare: $out")
+    return out
+  }
+
+  /** Speech pieces as the VAD cuts them (sentences or phrases), padded with a little silence. */
+  private fun vadSegments(samples: FloatArray): List<FloatArray> {
+    val vad = newVad()
+    val out = mutableListOf<FloatArray>()
+    val pad = FloatArray(ASR_RATE / 4)
+    val drain = {
+      while (!vad.empty()) {
+        out += pad + vad.front().samples + pad
+        vad.pop()
+      }
+    }
+    try {
+      var i = 0
+      while (i + VAD_WINDOW <= samples.size) {
+        vad.acceptWaveform(samples.copyOfRange(i, i + VAD_WINDOW))
+        drain()
+        i += VAD_WINDOW
+      }
+      vad.flush()
+      drain()
+    } finally {
+      vad.release()
+    }
+    return out
+  }
+
+  /** 16-bit little-endian mono PCM (what startListening records) as floats. */
+  private fun readPcm(f: File): FloatArray {
+    val bytes = f.readBytes()
+    val n = bytes.size / 2
+    return FloatArray(n) { i ->
+      val v = (bytes[2 * i].toInt() and 0xff) or (bytes[2 * i + 1].toInt() shl 8)
+      v.toShort() / 32768f
+    }
   }
 
   /** Punctuation and capitals for finished sentences, or null when the model is not in this build. */
@@ -608,7 +875,9 @@ class VoxaEngineModule : Module() {
             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
             .build(),
         )
-        .setBufferSizeInBytes(max(minBuf, rate)) // ~250 ms of float audio
+        // ~250 ms of float audio. Must be a whole number of 4-byte frames: 22050 Hz (Piper)
+        // is not, and AudioTrack then refuses it with "Invalid audio buffer size".
+        .setBufferSizeInBytes((max(minBuf, rate) + 3) / 4 * 4)
         .setTransferMode(AudioTrack.MODE_STREAM)
         .build()
 

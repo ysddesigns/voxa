@@ -40,12 +40,12 @@ class SpeakerLabeller(
         // Fold a short tail into this chunk rather than labelling a few seconds alone.
         if (totalSamples - offset - len < MIN_TAIL_SEC * sampleRate) len = totalSamples - offset
         val samples = read(raf, offset, len.toInt())
-        val base = offset
-        val turns = diar.processWithCallback(samples, { done, total, _ ->
-          if (total > 0) onProgress((base + len * done.toDouble() / total) / totalSamples)
-          if (cancelled()) 1 else 0
-        }, 0L)
+        // Not processWithCallback: sherpa-onnx 2.0.1's JNI looks up invoke(IIJ)Ljava/lang/Integer;
+        // on the callback, which no Kotlin lambda has, and the app aborts. Progress and
+        // cancelling therefore move in whole chunks.
+        val turns = diar.process(samples)
         if (cancelled()) throw Cancelled()
+        onProgress((offset + len).toDouble() / totalSamples)
 
         // Map this chunk's speaker numbers to meeting-wide ones.
         val local = turns.map { it.speaker }.distinct()

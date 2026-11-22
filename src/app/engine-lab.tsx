@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { nativeBenchmark } from '@/engines/native';
+import { AsrCompareCard } from '@/features/asr-compare/compare-card';
 import { parseLongTest, summarizeLongTest, type LongTestSummary } from '@/engines/native/long-test';
 import { DEV_CATALOGUE } from '@/features/packs/catalogue';
 import { packService } from '@/features/packs/packs';
@@ -393,6 +394,10 @@ export default function EngineLab() {
             </View>
           ))}
       </View>
+
+      {/* Listening models */}
+      <Text style={[type.overline, { color: colors.textSecondary }]}>Compare listening models</Text>
+      <AsrCompareCard disabled={listening || longRunning} />
 
       {/* Downloads */}
       <Text style={[type.overline, { color: colors.textSecondary }]}>Downloads</Text>

@@ -11,6 +11,8 @@ android {
   defaultConfig {
     versionCode 1
     versionName '0.1.0'
+    // Keeps sherpa-onnx classes through R8 in release builds (JNI reads them by name).
+    consumerProguardFiles 'consumer-rules.pro'
   }
 }
 
