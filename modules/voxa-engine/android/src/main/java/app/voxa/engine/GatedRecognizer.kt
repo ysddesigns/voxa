@@ -12,12 +12,14 @@ import com.k2fsa.sherpa.onnx.Vad
  * fired, which gives cleaner sentence breaks in noisy rooms.
  *
  * In a meeting much of the audio is silence or pauses, so this saves battery on long sessions.
- * Not thread-safe: use from the one listening thread.
+ * With no [vad] every chunk is decoded and only the recognizer's endpoint rule ends sentences
+ * (the settings test compares both). Not thread-safe: use from the one listening thread.
  */
 class GatedRecognizer(
   private val recognizer: OnlineRecognizer,
-  private val vad: Vad,
+  private val vad: Vad?,
   private val rate: Int,
+  private val pauseMs: Int = PAUSE_MS,
 ) {
   class Result(val text: String, val final: Boolean, val startMs: Long, val endMs: Long)
 
@@ -42,10 +44,13 @@ class GatedRecognizer(
   fun feed(samples: FloatArray, out: (Result) -> Unit) {
     val chunkStart = heardSamples
     heardSamples += samples.size
-    vad.acceptWaveform(samples)
-    val voiced = vad.isSpeechDetected()
-    // Only the speech/no-speech flag is used; drop the VAD's own copies of speech segments.
-    while (!vad.empty()) vad.pop()
+    val voiced = if (vad == null) {
+      true
+    } else {
+      vad.acceptWaveform(samples)
+      // Only the speech/no-speech flag is used; drop the VAD's own copies of speech segments.
+      vad.isSpeechDetected().also { while (!vad.empty()) vad.pop() }
+    }
 
     if (!speaking) {
       if (!voiced) {
@@ -73,7 +78,7 @@ class GatedRecognizer(
       if (text.isNotEmpty()) out(Result(text, false, segStartMs, now))
     }
 
-    val paused = silentSamples >= rate.toLong() * PAUSE_MS / 1000
+    val paused = silentSamples >= rate.toLong() * pauseMs / 1000
     if (paused || recognizer.isEndpoint(stream)) {
       // A little silence lets the model finish the last word before the sentence is closed.
       if (paused) decode(FloatArray(rate * 3 / 10))

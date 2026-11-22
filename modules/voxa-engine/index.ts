@@ -110,6 +110,21 @@ export type NativeAsrCompareResult = {
   error?: string;
 };
 
+/** How Live turns sound into words (see ListenTuning.kt). */
+export type ListenTuning = { beam: boolean; gain: boolean; vadThreshold: number; pauseMs: number; gate: boolean };
+
+/** One variant's run in tuneAsr. */
+export type NativeAsrTuneResult = {
+  id: string;
+  audioSec: number;
+  text?: string;
+  rtf?: number;
+  /** Audio the recognizer actually ran on (the VAD skips silence). */
+  decodedSec?: number;
+  sentences?: number;
+  error?: string;
+};
+
 export type NativePackFile ={ path: string; url: string; sha256: string; bytes: number };
 
 type VoxaEngineNative = {
@@ -171,6 +186,12 @@ type VoxaEngineNative = {
     /** engine: "online" (default), or "moonshine" / "omnilingual" for whole-sentence models (builds from 23 Nov 2026). */
     candidates: { id: string; modelType?: string; engine?: string }[],
   ): Promise<NativeAsrCompareResult[]>;
+  /** Live's own pipeline on one recording, once per settings variant. Builds from 24 Nov 2026. */
+  tuneAsr?(audioPath: string, variants: (Partial<ListenTuning> & { id: string })[]): Promise<NativeAsrTuneResult[]>;
+  /** The settings Live uses now. Builds from 24 Nov 2026. */
+  listenTuning?(): ListenTuning;
+  /** Saves the settings Live uses (null: back to the defaults); returns what is now in use. */
+  setListenTuning?(tuning: ListenTuning | null): ListenTuning;
   /** Scan text (ML Kit, offline). Builds from 22 Nov 2026. */
   recognizeText?(uri: string): Promise<NativeScanLine[]>;
   /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */

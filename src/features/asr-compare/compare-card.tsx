@@ -8,8 +8,9 @@ import type { InstallHandle } from '@/features/packs/pack-service';
 import { packService } from '@/features/packs/packs';
 import { formatMB, verdictMessage } from '@/features/packs/rules';
 import { deviceFiles } from '@/storage/device-files';
-import { VoxaEngine, type NativeAsrCompareResult } from '../../../modules/voxa-engine';
+import { VoxaEngine, type ListenTuning, type NativeAsrCompareResult, type NativeAsrTuneResult } from '../../../modules/voxa-engine';
 import { CANDIDATES, PASSAGES, percent, score, type Score } from './compare';
+import { DEFAULT_TUNING, VARIANTS, describe, pickBest, sameTuning } from './tuning';
 
 /** Inside Voxa's folder (deviceFiles paths) and the same file as the native module sees it. */
 const CLIP = 'lab/compare.pcm';
@@ -55,6 +56,53 @@ export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
     setHeardSec(null);
   };
   const [error, setError] = useState<string | null>(null);
+
+  // Live settings test: the same recording through Live's own pipeline, once per variant.
+  const canTune = !!VoxaEngine?.tuneAsr;
+  const [tuneResults, setTuneResults] = useState<NativeAsrTuneResult[] | null>(null);
+  const [tuning, setTuning] = useState(false);
+  const [liveTuning, setLiveTuning] = useState<ListenTuning | null>(() => VoxaEngine?.listenTuning?.() ?? null);
+  const tuneScored = useMemo(() => {
+    if (!tuneResults) return null;
+    const rows = tuneResults.map((r) => {
+      const v = VARIANTS.find((x) => x.id === r.id);
+      const s = r.text === undefined ? undefined : score(reference, r.text);
+      return { ...r, name: v?.name ?? r.id, tuning: v?.tuning ?? DEFAULT_TUNING, wer: s?.wer, werWithoutNames: s?.werWithoutNames, refWords: s?.refWords };
+    });
+    return { rows, best: pickBest(rows) };
+  }, [tuneResults, reference]);
+
+  const testSettings = async () => {
+    if (!VoxaEngine?.tuneAsr) return;
+    setTuning(true);
+    setError(null);
+    try {
+      const raw = await VoxaEngine.tuneAsr(
+        CLIP_NATIVE,
+        VARIANTS.map((v) => ({ id: v.id, ...v.tuning })),
+      );
+      setTuneResults(raw);
+      console.log(
+        'VOXA_ASR_TUNE ' +
+          JSON.stringify({
+            passage: passageId,
+            results: raw.map((r) => {
+              const s = r.text === undefined ? undefined : score(reference, r.text);
+              return { ...r, wer: s?.wer, werWithoutNames: s?.werWithoutNames };
+            }),
+          }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTuning(false);
+    }
+  };
+
+  const applyToLive = (t: ListenTuning | null) => {
+    if (!VoxaEngine?.setListenTuning) return;
+    setLiveTuning(VoxaEngine.setListenTuning(t));
+  };
 
   const refresh = () => {
     if (!packService) return;
@@ -262,8 +310,65 @@ export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
         disabled={!available || recording || heardSec === null || downloaded === 0}
         busy={busy}
       />
+      <LabButton
+        label="Test Live settings"
+        onPress={testSettings}
+        disabled={!available || !canTune || recording || busy || heardSec === null || !installed.has(LISTEN_PACK)}
+        busy={tuning}
+      />
+      {available && !canTune && <Text style={[type.caption, { color: colors.warning }]}>The settings test needs a newer build. Rebuild Android.</Text>}
       {busy && <Text style={[type.caption, { color: colors.textTertiary }]}>Loading and running each model in turn. Larger ones take a while.</Text>}
+      {tuning && <Text style={[type.caption, { color: colors.textTertiary }]}>Replaying your recording through Live five ways. About a minute.</Text>}
       {error && <Text style={[type.caption, { color: colors.warning }]}>{error}</Text>}
+
+      {tuneScored && (
+        <View style={[row, { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+          <Text style={[type.headline, { color: colors.text }]}>Live settings</Text>
+          <Text style={[type.footnote, { color: colors.textSecondary }]}>
+            Now in use: {liveTuning ? describe(liveTuning) : 'unknown'}
+            {liveTuning && !sameTuning(liveTuning, DEFAULT_TUNING) ? ' (changed from the shipped settings)' : ''}
+          </Text>
+          {tuneScored.rows.map((r) => {
+            const inUse = sameTuning(r.tuning, liveTuning);
+            const best = tuneScored.best?.id === r.id;
+            return (
+              <View key={r.id} style={{ gap: 4 }}>
+                <Text style={[type.callout, { color: colors.text }]}>
+                  {r.name}
+                  {best ? ' · best' : ''}
+                  {inUse ? ' · in use' : ''}
+                </Text>
+                {r.error ? (
+                  <Text style={[type.caption, { color: colors.accentText }]}>{r.error}</Text>
+                ) : (
+                  <>
+                    <Text style={[type.caption, { color: colors.textSecondary }]}>
+                      Word error {percent(r.wer!)} · without names {percent(r.werWithoutNames!)} · speed RTF {r.rtf!.toFixed(2)} ·{' '}
+                      {r.sentences} sentences · {describe(r.tuning)}
+                    </Text>
+                    <Text style={[type.body, { color: colors.text }]}>“{r.text || '(nothing)'}”</Text>
+                    {!inUse && VoxaEngine?.setListenTuning ? (
+                      <Pressable
+                        onPress={() => applyToLive(r.tuning)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Use ${r.name} for Live`}
+                        style={[styles.small, { backgroundColor: best ? colors.accent : colors.chip, alignSelf: 'flex-start' }]}
+                      >
+                        <Text style={[type.callout, { color: best ? colors.onAccent : colors.text }]}>Use for Live</Text>
+                      </Pressable>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            );
+          })}
+          {liveTuning && !sameTuning(liveTuning, DEFAULT_TUNING) && VoxaEngine?.setListenTuning ? (
+            <Pressable onPress={() => applyToLive(null)} accessibilityRole="button" style={[styles.small, { backgroundColor: colors.chip, alignSelf: 'flex-start' }]}>
+              <Text style={[type.callout, { color: colors.text }]}>Back to shipped settings</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
 
       {scored?.map((r) => (
         <View key={r.id} style={[row, { flexDirection: 'column', gap: 4 }]}>

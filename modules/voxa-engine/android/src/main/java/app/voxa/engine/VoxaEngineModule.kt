@@ -114,6 +114,8 @@ class VoxaEngineModule : Module() {
   /** Held while a voice generates audio, so it is never freed mid-sentence. */
   private val genLock = Any()
   private var recognizer: OnlineRecognizer? = null
+  /** Whether [recognizer] was built with beam search (rebuilt when the saved tuning changes). */
+  private var asrBeam = false
   private var asrLoadMs = 0L
   private var punct: OnlinePunctuation? = null
   private var punctTried = false
@@ -412,6 +414,31 @@ class VoxaEngineModule : Module() {
       }
     }
 
+    // Settings test: Live's pipeline on one recording, once per variant (see runTune).
+    // variants: [{ id, beam, gain, vadThreshold, pauseMs, gate }]. Builds from 24 Nov 2026.
+    AsyncFunction("tuneAsr") { audioPath: String, variants: List<Map<String, Any?>>, promise: Promise ->
+      val audio = appFile(audioPath)
+      when {
+        audio == null || !audio.isFile -> promise.reject("E_PATH", "Record something first", null)
+        listening -> promise.reject("E_BUSY", "Stop listening first", null)
+        else -> thread(name = "voxa-asr-tune") {
+          try {
+            promise.resolve(runTune(audio, variants))
+          } catch (e: Throwable) {
+            Log.e(TAG, "tune failed", e)
+            promise.reject("E_TUNE", e.message ?: "Settings test failed", e)
+          }
+        }
+      }
+    }
+
+    // The settings Live uses: read, save (from the settings test) or go back to the defaults.
+    Function("listenTuning") { ListenTuning.load(context).toMap() }
+    Function("setListenTuning") { tuning: Map<String, Any?>? ->
+      if (tuning == null) ListenTuning.reset(context) else ListenTuning.save(context, ListenTuning.from(tuning))
+      ListenTuning.load(context).toMap()
+    }
+
     AsyncFunction("benchmark") { promise: Promise ->
       thread(name = "voxa-bench") {
         try {
@@ -677,20 +704,80 @@ class VoxaEngineModule : Module() {
   )
 
   private fun ensureAsr(): OnlineRecognizer = synchronized(lock) {
-    recognizer?.let { return it }
+    val beam = ListenTuning.load(context).beam
+    recognizer?.let { if (asrBeam == beam) return it else it.release() }
+    recognizer = null
     val t0 = SystemClock.elapsedRealtime()
     val m = models(LISTEN_PACK, "asr", "encoder.onnx")
-    val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true))
+    val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = beam))
     asrLoadMs = SystemClock.elapsedRealtime() - t0
     recognizer = created
+    asrBeam = beam
     created
+  }
+
+  /**
+   * Settings test (Engine lab): replays one recording through Live's own pipeline (gain, VAD gate,
+   * sentence breaks, recognizer) once per variant, so the scores are what Live would have written.
+   * The recording is raw microphone audio, so every variant starts from the same sound.
+   */
+  private fun runTune(audio: File, variants: List<Map<String, Any?>>): List<Map<String, Any>> {
+    val samples = readPcm(audio)
+    if (samples.size < ASR_RATE) throw IllegalStateException("The recording is shorter than a second")
+    val audioSec = samples.size.toDouble() / ASR_RATE
+    synchronized(lock) {
+      recognizer?.release()
+      recognizer = null
+    }
+    val m = models(LISTEN_PACK, "asr", "encoder.onnx")
+    val vadModel = models(LISTEN_PACK, "vad", "silero_vad.onnx")
+    val step = ASR_RATE / 10
+    return variants.map { v ->
+      val id = v["id"]?.toString().orEmpty()
+      val t = ListenTuning.from(v)
+      val out = linkedMapOf<String, Any>("id" to id, "audioSec" to audioSec)
+      var r: OnlineRecognizer? = null
+      var vad: Vad? = null
+      var gate: GatedRecognizer? = null
+      try {
+        r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = t.beam))
+        vad = if (t.gate) newVad(vadModel, t.vadThreshold) else null
+        val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs)
+        gate = g
+        val agc = if (t.gain) Agc() else null
+        val finals = mutableListOf<String>()
+        val collect = { res: GatedRecognizer.Result -> if (res.final) finals.add(res.text) }
+        val t0 = SystemClock.elapsedRealtime()
+        var i = 0
+        while (i < samples.size) {
+          val end = minOf(i + step, samples.size)
+          val chunk = samples.copyOfRange(i, end)
+          g.feed(agc?.process(chunk) ?: chunk, collect)
+          i = end
+        }
+        g.finish(collect)
+        out["rtf"] = (SystemClock.elapsedRealtime() - t0) / 1000.0 / audioSec
+        out["decodedSec"] = g.decodedSamples.toDouble() / ASR_RATE
+        out["sentences"] = finals.size
+        out["text"] = finals.joinToString(" ")
+      } catch (e: Throwable) {
+        Log.e(TAG, "tune: $id failed", e)
+        out["error"] = e.message ?: e.toString()
+      } finally {
+        gate?.release()
+        vad?.release()
+        r?.release()
+      }
+      Log.i(TAG, "tune: $out")
+      out
+    }
   }
 
   /**
    * A streaming transducer in a model folder holding encoder.onnx, decoder.onnx, joiner.onnx and
    * tokens.txt. modelType "" lets sherpa-onnx tell the kind (Zipformer, NeMo) from the model itself.
    */
-  private fun asrConfig(m: ModelDir, endpoint: Boolean, modelType: String = "") = OnlineRecognizerConfig(
+  private fun asrConfig(m: ModelDir, endpoint: Boolean, modelType: String = "", beam: Boolean = false) = OnlineRecognizerConfig(
     featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80),
     modelConfig = OnlineModelConfig(
       transducer = OnlineTransducerModelConfig(
@@ -704,7 +791,9 @@ class VoxaEngineModule : Module() {
       modelType = modelType,
     ),
     enableEndpoint = endpoint,
-    decodingMethod = "greedy_search",
+    // Beam search keeps 4 readings alive and picks the best phrase: fewer errors, a little more CPU.
+    decodingMethod = if (beam) "modified_beam_search" else "greedy_search",
+    maxActivePaths = 4,
   )
 
   /**
@@ -1236,8 +1325,11 @@ class VoxaEngineModule : Module() {
       started.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
       resolved = true
 
-      val vad = newVad()
-      val gate = GatedRecognizer(r, vad, ASR_RATE)
+      val tuning = ListenTuning.load(context)
+      val vad = if (tuning.gate) newVad(tuning.vadThreshold) else null
+      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs)
+      val agc = if (tuning.gain) Agc() else null
+      Log.i(TAG, "listening with $tuning")
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
       val bytes = ByteArray(buf.size * 2)
       var segment = 0
@@ -1265,13 +1357,14 @@ class VoxaEngineModule : Module() {
           var sum = 0.0
           val samples = FloatArray(n) { val v = buf[it] / 32768f; sum += v * v; v }
           emitListen("level", mapOf("rms" to sqrt(sum / n)))
-          gate.feed(samples, onResult)
+          // The saved recording stays raw; only what the model hears is levelled.
+          gate.feed(agc?.process(samples) ?: samples, onResult)
         }
         gate.finish(onResult)
         Log.i(TAG, "listened ${gate.heardSamples / ASR_RATE} s, recognizer ran on ${gate.decodedSamples / ASR_RATE} s")
       } finally {
         gate.release()
-        vad.release()
+        vad?.release()
       }
     } catch (e: Throwable) {
       Log.e(TAG, "listen failed", e)
@@ -1468,17 +1561,17 @@ class VoxaEngineModule : Module() {
   }
 
   /** Silero VAD for 16 kHz audio. Small (2 MB) and fast, so each listening session makes its own. */
-  private fun newVad(): Vad {
+  private fun newVad(threshold: Float = 0.5f): Vad {
     val m = models(LISTEN_PACK, "vad", "silero_vad.onnx")
-    return newVad(m)
+    return newVad(m, threshold)
   }
 
-  private fun newVad(m: ModelDir) = Vad(
+  private fun newVad(m: ModelDir, threshold: Float = 0.5f) = Vad(
     assetManager = m.assets,
     config = VadModelConfig(
       sileroVadModelConfig = SileroVadModelConfig(
         model = "${m.path}/silero_vad.onnx",
-        threshold = 0.5f,
+        threshold = threshold,
         minSilenceDuration = 0.25f,
         minSpeechDuration = 0.25f,
         windowSize = VAD_WINDOW,
