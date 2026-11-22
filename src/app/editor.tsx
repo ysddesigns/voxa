@@ -212,10 +212,6 @@ export default function Editor() {
             <Text style={[type.caption, { color: colors.textTertiary }]}>
               {s.words.length} {s.words.length === 1 ? 'word' : 'words'} · about {formatTime(durationMs(s.words.length, s.rate))}
             </Text>
-            <View style={styles.offline}>
-              <Icon name="check" size={13} color={colors.accent} onColor={colors.onAccent} />
-              <Text style={[type.caption, { color: colors.textTertiary }]}>Works offline</Text>
-            </View>
             {s.error && (
               <Text style={[type.caption, { color: colors.accentText }]} accessibilityLiveRegion="polite">
                 {`Couldn't play: ${s.error}`}
@@ -341,7 +337,6 @@ const styles = StyleSheet.create({
   script: { fontFamily: type.body.fontFamily, fontSize: 20, lineHeight: 32 },
   input: { minHeight: 220, padding: 0 },
   sheetFoot: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },
-  offline: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   preview: {
     position: 'absolute',
     left: 16,
