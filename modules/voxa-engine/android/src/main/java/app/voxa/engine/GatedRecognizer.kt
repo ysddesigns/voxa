@@ -80,11 +80,14 @@ class GatedRecognizer(
 
     val paused = silentSamples >= rate.toLong() * pauseMs / 1000
     if (paused || recognizer.isEndpoint(stream)) {
-      // A little silence lets the model finish the last word before the sentence is closed.
-      if (paused) decode(FloatArray(rate * 3 / 10))
+      // Close the sentence properly: tell the model no more audio is coming so it writes out the
+      // last word it is still holding (a streaming model looks a little ahead), then start a fresh
+      // stream. Reading the text and resetting straight away lost each sentence's final word.
+      flush()
       val final = recognizer.getResult(stream).text.trim()
       if (final.isNotEmpty()) out(Result(final, true, segStartMs, now))
-      recognizer.reset(stream)
+      stream.release()
+      stream = recognizer.createStream("")
       last = ""
       segStartMs = now
       if (paused) speaking = false
@@ -94,9 +97,7 @@ class GatedRecognizer(
   /** Closes the last sentence when listening stops. The recognizer cannot be fed after this. */
   fun finish(out: (Result) -> Unit) {
     if (speaking) {
-      decode(FloatArray(rate / 2))
-      stream.inputFinished()
-      while (recognizer.isReady(stream)) recognizer.decode(stream)
+      flush()
       val text = recognizer.getResult(stream).text.trim()
       if (text.isNotEmpty()) out(Result(text, true, segStartMs, ms(heardSamples)))
     }
@@ -105,6 +106,15 @@ class GatedRecognizer(
 
   fun release() {
     stream.release()
+  }
+
+  /** Half a second of silence, then end of input: the model emits everything it heard. */
+  private fun flush() {
+    decode(FloatArray(rate / 2))
+    val t = System.nanoTime()
+    stream.inputFinished()
+    while (recognizer.isReady(stream)) recognizer.decode(stream)
+    decodeNs += System.nanoTime() - t
   }
 
   private fun decode(samples: FloatArray) {
