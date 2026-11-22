@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
+import { Button, Card, LargeTitle, NavBar, Page } from '@/components/ui';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -40,8 +39,6 @@ type Phase = 'loading' | 'consent' | 'ready' | 'recording' | 'saving' | 'sharing
  */
 export default function DonateScreen() {
   const { colors } = useTheme();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
   const available = !!VoxaEngine?.startRecording && !!VoxaEngine.zipFolder;
 
   const [phase, setPhase] = useState<Phase>('loading');
@@ -201,16 +198,9 @@ export default function DonateScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={[styles.iconBtn, { backgroundColor: colors.chip }]}>
-          <Icon name="chevronLeft" size={20} color={colors.text} />
-        </Pressable>
-        <Text style={[type.heading, { color: colors.text }]} accessibilityRole="header">
-          Donate your voice
-        </Text>
-      </View>
-
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 16 }}>
+      <NavBar back="Settings" />
+      <Page style={{ gap: 16 }}>
+        <LargeTitle>Donate your voice</LargeTitle>
         {!available ? (
           <Card>
             <Text style={[type.body, { color: colors.text }]}>Recording needs the latest version of Voxa. Update the app, then come back here.</Text>
@@ -232,8 +222,8 @@ export default function DonateScreen() {
 
             {prompt ? (
               <Card>
-                <Text style={[type.overline, { color: colors.textTertiary }]}>Read this aloud</Text>
-                <Text style={[type.title, { color: colors.text }]} accessibilityRole="text">
+                <Text style={[type.footnote, { color: colors.textSecondary }]}>Read this aloud</Text>
+                <Text style={[type.heading, { color: colors.text }]} accessibilityRole="text">
                   {prompt.text}
                 </Text>
 
@@ -245,12 +235,12 @@ export default function DonateScreen() {
                     <Text style={[type.caption, { color: colors.textTertiary }]}>
                       {level < 0.01 ? 'We cannot hear you yet. Speak a little louder.' : `Recording · ${(elapsed / 1000).toFixed(0)} s`}
                     </Text>
-                    <Button label="Stop and save" icon="stop" onPress={stop} primary />
+                    <Button label="Stop and Save" icon="stop" onPress={stop} />
                   </>
                 ) : (
                   <View style={styles.actions}>
-                    <Button label="Record" icon="mic" onPress={() => record(prompt)} primary disabled={busy} />
-                    <Button label="Skip" onPress={() => setSkipped((s) => new Set(s).add(prompt.id))} disabled={busy} />
+                    <Button label="Record" icon="mic" accent onPress={() => record(prompt)} disabled={busy} style={{ flex: 2 }} />
+                    <Button label="Skip" kind="gray" onPress={() => setSkipped((s) => new Set(s).add(prompt.id))} disabled={busy} style={{ flex: 1 }} />
                   </View>
                 )}
               </Card>
@@ -260,7 +250,7 @@ export default function DonateScreen() {
                   {skipped.size ? 'You have been through every sentence. ' : 'You recorded every sentence. Thank you! '}
                   Share your recordings below.
                 </Text>
-                {skipped.size ? <Button label="Show skipped sentences" onPress={() => setSkipped(new Set())} /> : null}
+                {skipped.size ? <Button label="Show Skipped Sentences" kind="gray" onPress={() => setSkipped(new Set())} /> : null}
               </Card>
             )}
 
@@ -280,7 +270,7 @@ export default function DonateScreen() {
               <Text style={[type.body, { color: colors.text }]}>
                 Your recordings stay on this phone until you send them. When you are ready, share them as one file by WhatsApp, email or Drive.
               </Text>
-              <Button label={phase === 'sharing' ? 'Preparing…' : 'Share my recordings'} icon="share" onPress={share} disabled={busy || phase === 'recording' || !takes.length} />
+              <Button label={phase === 'sharing' ? 'Preparing…' : 'Share My Recordings'} icon="share" onPress={share} disabled={busy || phase === 'recording' || !takes.length} />
               <Pressable onPress={deleteAll} disabled={busy || phase === 'recording'} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
                 <Icon name="trash" size={18} color={colors.accentText} />
                 <Text style={[type.body, { color: colors.accentText, flex: 1 }]}>Delete all my recordings</Text>
@@ -293,7 +283,7 @@ export default function DonateScreen() {
             </Card>
           </>
         )}
-      </ScrollView>
+      </Page>
     </View>
   );
 }
@@ -313,43 +303,23 @@ function Consent({ onAgree }: { onAgree: () => void }) {
       <Text style={[type.body, { color: colors.text }]}>
         Voxa listens best to the voices it learned from. Most speech models learned from American and British speakers. You can help change that.
       </Text>
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
+      <Card>
         {points.map((p) => (
           <View key={p} style={{ flexDirection: 'row', gap: 10 }}>
             <Icon name="check" size={18} color={colors.accent} />
             <Text style={[type.callout, { color: colors.text, flex: 1 }]}>{p}</Text>
           </View>
         ))}
-      </View>
-      <Text style={[type.caption, { color: colors.textSecondary }]}>
-        By tapping I agree, you allow Voxa to use the recordings you send to train and test its speech models. You must be eighteen or older.
+      </Card>
+      <Text style={[type.footnote, { color: colors.textSecondary }]}>
+        By tapping I Agree, you allow Voxa to use the recordings you send to train and test its speech models. You must be eighteen or older.
       </Text>
-      <Button label="I agree, let us start" onPress={onAgree} primary />
+      <Button label="I Agree" accent onPress={onAgree} />
     </>
   );
 }
 
-function Card({ children }: { children: ReactNode }) {
-  const { colors } = useTheme();
-  return <View style={[styles.card, { backgroundColor: colors.card }]}>{children}</View>;
-}
 
-function Button({ label, icon, onPress, primary, disabled }: { label: string; icon?: 'mic' | 'stop' | 'share'; onPress: () => void; primary?: boolean; disabled?: boolean }) {
-  const { colors } = useTheme();
-  const fg = primary ? colors.onPrimary : colors.text;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed }) => [styles.button, { backgroundColor: primary ? colors.primaryFill : colors.chip, opacity: disabled ? 0.4 : pressed ? 0.7 : 1 }]}
-    >
-      {icon ? <Icon name={icon} size={18} color={fg} /> : null}
-      <Text style={[type.callout, { color: fg }]}>{label}</Text>
-    </Pressable>
-  );
-}
 
 const minutes = (ms: number) => {
   const m = ms / 60000;
@@ -357,12 +327,8 @@ const minutes = (ms: number) => {
 };
 
 const styles = StyleSheet.create({
-  nav: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 4 },
-  iconBtn: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },
-  card: { borderRadius: radius.card, padding: 16, gap: 12 },
   bar: { height: 6, borderRadius: radius.pill, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: radius.pill },
   actions: { flexDirection: 'row', gap: 10 },
-  button: { flexGrow: 1, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', minHeight: minTouch + 4, borderRadius: radius.pill, paddingHorizontal: 18 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch },
 });

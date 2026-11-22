@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   big: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: minTouch + 8, borderRadius: radius.pill },
   pill: { borderRadius: radius.pill, paddingHorizontal: 16, minHeight: minTouch, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   thumb: { width: 56, height: 56, borderRadius: 10 },
-  thumbBig: { width: '100%', height: 220, borderRadius: 12 },
+  thumbBig: { width: '100%', height: 220, borderRadius: 20, borderCurve: 'continuous' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: radius.chip, paddingHorizontal: 12, paddingVertical: 6 },
   text: { borderRadius: radius.card, padding: 16, minHeight: 200, textAlignVertical: 'top' },

@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   dot: { height: 8, borderRadius: 4 },
   body: { gap: 16, paddingVertical: 32 },
-  badge: { width: 72, height: 72, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  badge: { width: 72, height: 72, borderRadius: 20, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: radius.card, padding: 16, gap: 12 },
   ok: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actions: { flexDirection: 'row', gap: 10 },

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/design/theme';
+import { elevation } from '@/design/tokens';
 import { type } from '@/design/type';
 import { Icon, type IconName } from './icons';
 
@@ -30,7 +31,7 @@ export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
         {
           bottom: Math.max(insets.bottom, 12) + 8,
           backgroundColor: colors.tabBar,
-          shadowColor: '#000',
+          ...elevation(colors.shadow),
         },
       ]}
       accessibilityRole="tablist"
@@ -74,10 +75,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
-    elevation: 8,
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
   },
   item: {
     flex: 1,

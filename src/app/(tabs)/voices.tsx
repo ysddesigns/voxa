@@ -214,7 +214,7 @@ const sep = (color: string) => ({ borderTopWidth: StyleSheet.hairlineWidth, bord
 
 const styles = StyleSheet.create({
   storage: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.pill, marginBottom: 6 },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 12 },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, borderCurve: 'continuous' },
   searchInput: { flex: 1, paddingVertical: 0 },
   filters: { gap: 8 },
   filter: { minHeight: 44, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   bigPlay: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   smallPlay: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
+  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 999 },
   tags: { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   group: { borderRadius: radius.card, paddingHorizontal: 16 },

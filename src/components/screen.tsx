@@ -50,5 +50,5 @@ export function Placeholder({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  card: { borderRadius: 22, padding: 20 },
+  card: { borderRadius: 20, borderCurve: 'continuous', padding: 20 },
 });

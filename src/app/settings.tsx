@@ -1,16 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon } from '@/components/icons';
+import { ModelRow } from '@/components/model-row';
+import { ActionRow, Group, InfoRow, LargeTitle, NavBar, NavRow, Page, TextRow, ToggleRow } from '@/components/ui';
 import { TIER_LABEL } from '@/device/tier';
 import { useDeviceTier } from '@/device/use-device-tier';
 import { useTheme, type ThemePreference } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
+import { radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { useListen } from '@/features/listen/listen-session';
-import { ModelRow } from '@/components/model-row';
 import { useModels } from '@/features/packs/models';
 import { formatMB } from '@/features/packs/rules';
 import { usePrefs } from '@/features/settings/prefs';
@@ -18,17 +17,23 @@ import { deleteAllSessions, deleteWaitingAudio, readStorage, totalBytes, type St
 import { useVoices } from '@/features/voices/voices-store';
 import { sessionStore } from '@/storage';
 
+const THEMES: { id: ThemePreference; label: string }[] = [
+  { id: 'system', label: 'Automatic' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+];
+
 /** Settings (PRD ST-1..ST-5): appearance, speaking, downloads, storage, privacy, about. */
 export default function SettingsScreen() {
   const { colors, preference, setPreference } = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { prefs, update } = usePrefs();
   const { byId, defaultId } = useVoices();
   const listen = useListen();
   const tier = useDeviceTier();
   const [storage, setStorage] = useState<StorageUse>(readStorage);
   const models = useModels();
+  const android = Platform.OS === 'android';
 
   // Re-read after anything that changes what is stored.
   useEffect(() => {
@@ -55,199 +60,120 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={[styles.iconBtn, { backgroundColor: colors.chip }]}>
-          <Icon name="chevronLeft" size={20} color={colors.text} />
-        </Pressable>
-        <Text style={[type.heading, { color: colors.text }]} accessibilityRole="header">
-          Settings
-        </Text>
-      </View>
+      <NavBar back="Home" />
+      <Page>
+        <LargeTitle>Settings</LargeTitle>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 40, gap: 8 }}>
-        <Section title="Appearance">
-          <View style={styles.segment} accessibilityRole="radiogroup">
-            {(['system', 'light', 'dark'] as ThemePreference[]).map((p) => {
-              const on = preference === p;
-              return (
-                <Pressable
-                  key={p}
-                  onPress={() => setPreference(p)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: on }}
-                  style={[styles.segmentItem, { backgroundColor: on ? colors.primaryFill : colors.chip }]}
-                >
-                  <Text style={[type.callout, { color: on ? colors.onPrimary : colors.text }]}>{p === 'system' ? 'Phone setting' : p === 'light' ? 'Light' : 'Dark'}</Text>
-                </Pressable>
-              );
-            })}
+        <Group header="Appearance">
+          <View style={styles.segmentWrap}>
+            <View style={[styles.segment, { backgroundColor: colors.chip }]} accessibilityRole="radiogroup">
+              {THEMES.map((t) => {
+                const on = preference === t.id;
+                return (
+                  <Pressable
+                    key={t.id}
+                    onPress={() => setPreference(t.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    style={[styles.segmentItem, on && { backgroundColor: colors.card, boxShadow: `0 2px 6px ${colors.shadow}` }]}
+                  >
+                    <Text style={[type.subheadline, { color: colors.text, fontFamily: on ? type.headline.fontFamily : type.subheadline.fontFamily }]}>{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </Section>
+        </Group>
 
-        <Section title="Speaking">
-          <Row label="Voice" value={voice?.name ?? 'Choose a voice'} onPress={() => router.navigate('/voices')} />
-          <Row label="Quick phrases" onPress={() => router.push('/phrases')} />
-          <Toggle
-            label="Discreet mode"
-            hint="Speak for me plays in your earbuds, or the earpiece, never the loudspeaker."
-            value={prefs.discreet}
-            onChange={(v) => update({ discreet: v })}
-          />
-        </Section>
+        <Group header="Speaking" footer="Discreet mode plays Speak for me in your earbuds, or the earpiece, never the loudspeaker.">
+          <NavRow label="Voice" value={voice?.name ?? 'Choose'} onPress={() => router.navigate('/voices')} />
+          <NavRow label="Quick phrases" onPress={() => router.push('/phrases')} />
+          <ToggleRow label="Discreet mode" value={prefs.discreet} onChange={(v) => update({ discreet: v })} />
+        </Group>
 
-        <Section title="Listening">
-          <Toggle
-            label="Read captions with the screen reader"
-            hint="When TalkBack or VoiceOver is on, each new sentence on the Live screen is read out. Useful with a braille display."
-            value={prefs.readCaptions}
-            onChange={(v) => update({ readCaptions: v })}
-          />
-          {Platform.OS === 'android' ? <Row label="Keep listening with the screen off" onPress={() => router.push('/battery')} /> : null}
-          {Platform.OS === 'android' ? (
-            <Toggle
-              label="Show captions in the notification"
-              hint="The newest sentence appears in the Listening notification. It is never shown on the lock screen."
+        <Group header="Listening" footer="With TalkBack or VoiceOver on, each new caption is read out, which also works with a braille display.">
+          {android ? <NavRow label="Keep listening with the screen off" onPress={() => router.push('/battery')} /> : null}
+          <ToggleRow label="Read captions aloud" value={prefs.readCaptions} onChange={(v) => update({ readCaptions: v })} />
+          {android ? (
+            <ToggleRow
+              label="Captions in the notification"
+              hint="Never shown on the lock screen."
               value={prefs.noticeCaptions}
               onChange={(v) => update({ noticeCaptions: v })}
             />
           ) : null}
-        </Section>
+        </Group>
 
-        <Section title="Downloads">
-          <ModelRow id="listen" title="Listening" what="Live captions in English" />
-          <ModelRow id="speakers" title="Speaker labels" what="Who spoke when, after a meeting" />
-          <Toggle
-            label="Use mobile data"
-            hint="Allow downloads over 10 MB without Wi-Fi. Data charges may apply."
-            value={prefs.allowMobileData}
-            onChange={(v) => update({ allowMobileData: v })}
-          />
-        </Section>
+        <Group header="Downloads" footer="Without Wi-Fi, downloads over 10 MB wait unless mobile data is on. Data charges may apply.">
+          <View style={styles.inset}>
+            <ModelRow id="listen" title="Listening" what="Live captions in English" />
+          </View>
+          <View style={styles.inset}>
+            <ModelRow id="speakers" title="Speaker labels" what="Who spoke when, after a meeting" />
+          </View>
+          <ToggleRow label="Use mobile data" value={prefs.allowMobileData} onChange={(v) => update({ allowMobileData: v })} />
+        </Group>
 
-        <Section title="Storage">
-          {storage.freeBytes !== null ? (
-            <Text style={[type.callout, { color: colors.textSecondary }]}>
-              Voxa uses {formatMB(used)} · {formatMB(storage.freeBytes)} free on this phone
-            </Text>
-          ) : (
-            <Text style={[type.callout, { color: colors.textSecondary }]}>Storage details need the on-device engine.</Text>
-          )}
-          {storage.sessionBytes !== null ? <Info label="Transcripts and scans" value={formatMB(storage.sessionBytes)} /> : null}
-          {storage.audioBytes !== null ? <Info label="Meeting audio waiting for speaker labels" value={formatMB(storage.audioBytes)} /> : null}
+        <Group
+          header="Storage"
+          footer={storage.freeBytes !== null ? `Voxa uses ${formatMB(used)}. ${formatMB(storage.freeBytes)} free on this phone.` : 'Storage details need the on-device engine.'}
+        >
+          {storage.sessionBytes !== null ? <InfoRow label="Transcripts and scans" value={formatMB(storage.sessionBytes)} /> : null}
+          {storage.audioBytes !== null ? <InfoRow label="Meeting audio" value={formatMB(storage.audioBytes)} /> : null}
           {Object.entries(storage.packBytes).map(([id, bytes]) => (
-            <Info key={id} label={`Pack: ${id}`} value={formatMB(bytes)} />
+            <InfoRow key={id} label={`Pack: ${id}`} value={formatMB(bytes)} />
           ))}
-          <Danger
+          <ActionRow
             label="Delete waiting meeting audio"
+            destructive
             onPress={() =>
-              confirm('Delete meeting audio?', 'Transcripts stay. Speakers can no longer be labelled for those meetings.', 'Delete audio', () => deleteWaitingAudio(sessionStore))
+              confirm('Delete meeting audio?', 'Transcripts stay. Speakers can no longer be labelled for those meetings.', 'Delete Audio', () => deleteWaitingAudio(sessionStore))
             }
           />
-          <Danger
+          <ActionRow
             label="Delete everything saved"
+            destructive
             onPress={() =>
-              confirm(
-                'Delete all saved sessions?',
-                'Every transcript, scan and summary on this phone is removed. This cannot be undone.',
-                'Delete all',
-                () => deleteAllSessions(sessionStore),
+              confirm('Delete all saved sessions?', 'Every transcript, scan and summary on this phone is removed. This cannot be undone.', 'Delete All', () =>
+                deleteAllSessions(sessionStore),
               )
             }
           />
-        </Section>
+        </Group>
 
-        <Section title="Privacy">
-          <Text style={[type.callout, { color: colors.textSecondary }]}>
-            Voxa works on this phone. What you say, hear, type and scan is never sent anywhere. The internet is only used to download voices and models, and only when you ask.
-          </Text>
-        </Section>
+        <Group header="Privacy">
+          <TextRow>
+            <Text style={[type.subheadline, { color: colors.textSecondary }]}>
+              Voxa works on this phone. What you say, hear, type and scan is never sent anywhere. The internet is only used to download voices and models, and only when you ask.
+            </Text>
+          </TextRow>
+        </Group>
 
-        <Section title="Help Voxa">
-          <Row label="Donate your voice" onPress={() => router.push('/donate')} />
-          <Text style={[type.caption, { color: colors.textTertiary }]}>
-            Read short sentences aloud so Voxa learns to understand Nigerian voices. Nothing is sent unless you share it.
-          </Text>
-        </Section>
+        <Group header="Help Voxa" footer="Read short sentences aloud so Voxa learns Nigerian voices. Nothing is sent unless you share it.">
+          <NavRow label="Donate your voice" onPress={() => router.push('/donate')} />
+        </Group>
 
-        <Section title="About">
-          <Info label="Version" value={Constants.expoConfig?.version ?? 'dev'} />
-          <Info label="This phone" value={`${TIER_LABEL[tier]} models`} />
-          <Row label="Engine lab" onPress={() => router.push('/engine-lab')} />
-          <Row
+        <Group header="About">
+          <InfoRow label="Version" value={Constants.expoConfig?.version ?? 'dev'} />
+          <InfoRow label="This phone" value={`${TIER_LABEL[tier]} models`} />
+          <NavRow label="Open-source licences" onPress={() => router.push('/licences')} />
+          <NavRow label="Engine lab" onPress={() => router.push('/engine-lab')} />
+          <ActionRow
             label="Show setup again"
             onPress={() => {
               update({ onboarded: false });
               router.replace('/welcome');
             }}
           />
-          <Row label="Open-source licences" onPress={() => router.push('/licences')} />
-        </Section>
-      </ScrollView>
+        </Group>
+      </Page>
     </View>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ gap: 8, marginTop: 12 }}>
-      <Text style={[type.overline, { color: colors.textTertiary }]} accessibilityRole="header">
-        {title}
-      </Text>
-      <View style={[styles.card, { backgroundColor: colors.card }]}>{children}</View>
-    </View>
-  );
-}
-
-function Row({ label, value, onPress }: { label: string; value?: string; onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={value ? `${label}: ${value}` : label} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
-      <Text style={[type.body, { color: colors.text, flex: 1 }]}>{label}</Text>
-      {value ? <Text style={[type.callout, { color: colors.textTertiary }]}>{value}</Text> : null}
-      <Icon name="arrow" size={16} color={colors.textTertiary} />
-    </Pressable>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.row} accessible accessibilityLabel={`${label}: ${value}`}>
-      <Text style={[type.body, { color: colors.text, flex: 1 }]}>{label}</Text>
-      <Text style={[type.callout, { color: colors.textTertiary }]}>{value}</Text>
-    </View>
-  );
-}
-
-function Toggle({ label, hint, value, onChange }: { label: string; hint: string; value: boolean; onChange: (v: boolean) => void }) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={[type.body, { color: colors.text }]}>{label}</Text>
-        <Text style={[type.caption, { color: colors.textTertiary }]}>{hint}</Text>
-      </View>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: colors.accent, false: colors.waveUnplayed }} thumbColor="#FFFFFF" />
-    </View>
-  );
-}
-
-function Danger({ label, onPress }: { label: string; onPress: () => void }) {
-  const { colors } = useTheme();
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
-      <Icon name="trash" size={18} color={colors.accentText} />
-      <Text style={[type.body, { color: colors.accentText, flex: 1 }]}>{label}</Text>
-    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  nav: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 4 },
-  iconBtn: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },
-  card: { borderRadius: radius.card, paddingHorizontal: 16, paddingVertical: 8, gap: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch },
-  segment: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
-  segmentItem: { flex: 1, borderRadius: radius.pill, minHeight: minTouch, alignItems: 'center', justifyContent: 'center' },
+  inset: { paddingHorizontal: 16, paddingVertical: 4 },
+  segmentWrap: { padding: 8 },
+  segment: { flexDirection: 'row', borderRadius: radius.icon, padding: 2, ...squircle },
+  segmentItem: { flex: 1, minHeight: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', ...squircle },
 });

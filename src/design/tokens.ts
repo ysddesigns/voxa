@@ -1,19 +1,31 @@
 /**
- * Voxa design tokens. Source of truth: the Voxa design canvas and the PRD's
- * "Design requirements" token table. Keep names semantic, never raw hex in screens.
+ * Voxa design tokens: Apple's system palette (iOS grouped backgrounds, system greys, labels)
+ * with one brand accent. Keep names semantic, never raw hex in screens.
+ *
+ * Rules (anti-slop locks):
+ * - One accent: Voxa orange, spent on the primary action, active state and progress only.
+ * - One grey family: Apple's cool system greys. No warm greys.
+ * - Shape: actions are pills; cards, tiles and sheets 20; grouped lists 12; inputs and icon tiles 10.
+ *   Every rounded rectangle uses continuous corners (see `squircle`).
+ * - Text passes AA (4.5:1) on every surface it sits on: src/design/__tests__/contrast.test.ts.
  */
 export type Palette = {
+  /** systemGroupedBackground: the page behind cards and grouped lists. */
   background: string;
+  /** secondarySystemGroupedBackground: cards, grouped rows, sheets. */
   card: string;
+  /** Filled controls on a card: chips, segmented controls, gray buttons. */
   chip: string;
   chipPressed: string;
   separator: string;
+  /** label / secondaryLabel / tertiaryLabel, darkened where Apple's fail AA. */
   text: string;
   textSecondary: string;
   textTertiary: string;
   accent: string;
   accentText: string;
   onAccent: string;
+  /** Tinted background for notices (accent at low strength). */
   warning: string;
   primaryFill: string;
   onPrimary: string;
@@ -28,62 +40,74 @@ export type Palette = {
 };
 
 export const light: Palette = {
-  background: '#FBF4F0',
+  background: '#F2F2F7',
   card: '#FFFFFF',
-  chip: '#F0EBE7',
-  chipPressed: '#E3DCD7',
-  separator: '#F0EAE6',
-  text: '#111111',
-  textSecondary: '#5E5E63',
-  // Same as textSecondary in light mode: anything lighter fails AA on chips and tinted rows.
-  textTertiary: '#5E5E63',
+  chip: '#E5E5EA',
+  chipPressed: '#D1D1D6',
+  separator: '#C6C6C8',
+  text: '#000000',
+  // Apple's secondaryLabel (#3C3C43 at 60%) is about 3.6:1 on white; this is the AA-safe step.
+  textSecondary: '#55555A',
+  textTertiary: '#55555A',
   // Deepened from the canvas orange (#FF5A36, kept for the app icon) so white button text passes AA.
   accent: '#D63F1C',
-  accentText: '#AD3310',
+  accentText: '#A02F0F',
   onAccent: '#FFFFFF',
   warning: '#FDE3DE',
-  primaryFill: '#111111',
+  primaryFill: '#000000',
   onPrimary: '#FFFFFF',
-  waveUnplayed: '#D9D9DE',
-  tabBar: '#FFFFFF',
+  waveUnplayed: '#D1D1D6',
+  tabBar: '#F9F9F9',
   tabActiveFill: '#FDE3DE',
-  shadow: 'rgba(17,17,17,0.14)',
+  shadow: 'rgba(0,0,0,0.12)',
   highlight: '#FFE1D6',
   art: '#F58A84',
 };
 
 export const dark: Palette = {
-  background: '#0E0E0F',
+  background: '#000000',
   card: '#1C1C1E',
   chip: '#2C2C2E',
-  chipPressed: '#39393D',
-  separator: '#2C2C2E',
-  text: '#F5F5F7',
+  chipPressed: '#3A3A3C',
+  separator: '#38383A',
+  text: '#FFFFFF',
   textSecondary: '#AEAEB2',
   textTertiary: '#AEAEB2',
   accent: '#D63F1C',
   accentText: '#FF8A6B',
   onAccent: '#FFFFFF',
   warning: '#3A2420',
-  // Main action pill turns white with ink text in dark mode.
-  primaryFill: '#F5F5F7',
-  onPrimary: '#111111',
+  // The main action turns white with black text in dark mode, as in Apple's own apps.
+  primaryFill: '#FFFFFF',
+  onPrimary: '#000000',
   waveUnplayed: '#3A3A3C',
-  tabBar: '#1C1C1E',
+  tabBar: '#161618',
   tabActiveFill: '#3A2420',
-  shadow: 'rgba(0,0,0,0.4)',
+  shadow: 'rgba(0,0,0,0.5)',
   highlight: '#5A2A1E',
   art: '#7A3A30',
 };
 
+/** The shape scale. Old names (chip, hero, tile, icon) map onto it. */
 export const radius = {
-  chip: 999,
   pill: 999,
-  card: 22,
-  hero: 28,
-  tile: 24,
-  icon: 12,
+  chip: 999,
+  /** Cards, tiles, the Home hero, sheets. */
+  card: 20,
+  hero: 20,
+  tile: 20,
+  /** Grouped (Settings-style) lists. */
+  group: 12,
+  /** Text fields, icon tiles, small badges. */
+  icon: 10,
+  input: 10,
 } as const;
+
+/** Continuous (squircle) corners for every rounded rectangle; ignored where unsupported. */
+export const squircle = { borderCurve: 'continuous' } as const;
+
+/** The one elevation: floating bars and the player's play button. */
+export const elevation = (shadow: string) => ({ boxShadow: `0 8px 24px ${shadow}` }) as const;
 
 export const space = {
   xs: 4,

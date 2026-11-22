@@ -6,7 +6,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
 import { VoiceAvatar } from '@/components/voice-avatar';
 import { useTheme } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
+import { elevation, minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { durationMs, formatSpeed, formatTime } from '@/features/speak/playback';
 import { useSpeakSession } from '@/features/speak/speak-session';
@@ -162,7 +162,7 @@ export default function Editor() {
                 onLongPress={() => apply(insertPause(s.text, sel, true), '')}
               />
               <Tool
-                icon="sparkle"
+                icon="flag"
                 label="Emphasis"
                 hint="Stresses the word at the cursor, or the selected words. Tap again to remove."
                 onPress={() => apply(toggleEmphasis(s.text, sel), 'Tap a word or select some words first, then Emphasis.')}
@@ -229,7 +229,7 @@ export default function Editor() {
       <View
         style={[
           styles.preview,
-          { backgroundColor: colors.card, bottom: Math.max(insets.bottom, 12) + 10, shadowColor: '#000' },
+          { backgroundColor: colors.card, bottom: Math.max(insets.bottom, 12) + 10, ...elevation(colors.shadow) },
         ]}
       >
         <Pressable
@@ -353,8 +353,8 @@ const styles = StyleSheet.create({
   navTitle: { flex: 1, textAlign: 'center' },
   navRight: { minWidth: 90, height: minTouch, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 8 },
   voiceRow: { flexDirection: 'row', gap: 8 },
-  voiceChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 18, paddingVertical: 8, paddingLeft: 8, paddingRight: 12 },
-  speed: { width: 76, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  voiceChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.card, ...squircle, paddingVertical: 8, paddingLeft: 8, paddingRight: 12 },
+  speed: { width: 76, borderRadius: radius.card, ...squircle, alignItems: 'center', justifyContent: 'center' },
   sheet: { borderRadius: radius.tile, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 14 },
   script: { fontFamily: type.body.fontFamily, fontSize: 20, lineHeight: 32 },
   input: { minHeight: 220, padding: 0 },
@@ -365,16 +365,13 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     minHeight: 92,
-    borderRadius: 28,
+    borderRadius: radius.card,
+    ...squircle,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     paddingLeft: 14,
     paddingRight: 18,
-    elevation: 10,
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 12 },
   },
   previewPlay: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
   times: { flexDirection: 'row', justifyContent: 'space-between' },

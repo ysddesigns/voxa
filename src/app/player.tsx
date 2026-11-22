@@ -8,7 +8,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
 import { Waveform } from '@/components/waveform';
 import { useTheme } from '@/design/theme';
-import { minTouch, radius } from '@/design/tokens';
+import { elevation, minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
 import { formatSpeed, formatTime } from '@/features/speak/playback';
 import { useSpeakSession } from '@/features/speak/speak-session';
@@ -120,7 +120,7 @@ export default function Player() {
             disabled={!s.words.length}
             accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
-            style={[styles.play, { backgroundColor: colors.primaryFill, shadowColor: '#000' }]}
+            style={[styles.play, { backgroundColor: colors.primaryFill, ...elevation(colors.shadow) }]}
           >
             <Icon name={playing ? 'pause' : 'play'} size={32} color={colors.onPrimary} />
           </Pressable>
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginHorizontal: -12 },
   iconBtn: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
-  art: { marginTop: 8, flex: 1, maxHeight: 300, minHeight: 180, borderRadius: 32, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  art: { marginTop: 8, flex: 1, maxHeight: 300, minHeight: 180, borderRadius: radius.card, ...squircle, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   bubble: {
     width: 210,
     height: 128,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   times: { flexDirection: 'row', justifyContent: 'space-between' },
   tabular: { fontVariant: ['tabular-nums'] },
   controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pill: { width: 52, height: minTouch, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  pill: { width: 52, height: minTouch, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   skip: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
   play: {
     width: 80,
@@ -205,10 +205,6 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 8,
-    shadowOpacity: 0.25,
-    shadowRadius: 13,
-    shadowOffset: { width: 0, height: 12 },
   },
   chips: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
   exportRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: radius.card, paddingLeft: 16, paddingRight: 4, minHeight: minTouch + 8 },

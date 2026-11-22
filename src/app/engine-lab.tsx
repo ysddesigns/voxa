@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   button: { minHeight: minTouch + 4, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', gap: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center' },
+  chip: { minHeight: 36, paddingHorizontal: 14, borderRadius: 999, justifyContent: 'center' },
   meter: { height: 6, borderRadius: 3, overflow: 'hidden' },
   meterFill: { height: 6 },
 });

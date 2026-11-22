@@ -198,7 +198,6 @@ export default function SessionScreen() {
         {session.summary && (session.summary.keyPoints.length > 0 || session.summary.actions.length > 0) ? (
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.row}>
-              <Icon name="sparkle" size={20} color={colors.accentText} />
               <Text style={[type.bodyStrong, { color: colors.text }]} accessibilityRole="header">
                 Quick summary
               </Text>
