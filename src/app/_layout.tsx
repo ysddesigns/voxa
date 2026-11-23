@@ -34,6 +34,7 @@ function Root() {
         <Stack.Screen name="phrases" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="custom-words" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="donate" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="licences" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="battery" options={{ animation: 'slide_from_right' }} />

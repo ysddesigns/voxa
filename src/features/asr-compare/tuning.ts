@@ -6,10 +6,10 @@ import type { ListenTuning } from '../../../modules/voxa-engine';
  */
 
 /** Live's default settings. Must match ListenTuning's defaults in ListenTuning.kt. */
-export const DEFAULT_TUNING: ListenTuning = { beam: true, gain: true, vadThreshold: 0.5, pauseMs: 800, gate: true };
+export const DEFAULT_TUNING: ListenTuning = { beam: true, gain: true, vadThreshold: 0.5, pauseMs: 800, gate: true, words: true };
 
 /** The first release's settings, kept as the baseline the others are measured against. */
-export const ORIGINAL_TUNING: ListenTuning = { beam: false, gain: false, vadThreshold: 0.5, pauseMs: 800, gate: true };
+export const ORIGINAL_TUNING: ListenTuning = { beam: false, gain: false, vadThreshold: 0.5, pauseMs: 800, gate: true, words: false };
 
 export type TuneVariant = { id: string; name: string; tuning: ListenTuning };
 
@@ -17,7 +17,8 @@ export type TuneVariant = { id: string; name: string; tuning: ListenTuning };
 export const VARIANTS: TuneVariant[] = [
   { id: 'shipped', name: 'Original', tuning: ORIGINAL_TUNING },
   { id: 'beam', name: 'Beam search', tuning: { ...ORIGINAL_TUNING, beam: true } },
-  { id: 'beam-gain', name: 'Beam search + volume boost (default)', tuning: DEFAULT_TUNING },
+  { id: 'beam-gain', name: 'Beam search + volume boost', tuning: { ...DEFAULT_TUNING, words: false } },
+  { id: 'beam-gain-words', name: 'Beam + boost + custom words (default)', tuning: DEFAULT_TUNING },
   {
     id: 'beam-gain-gentle',
     name: 'Beam + boost + gentler voice gate',
@@ -29,13 +30,23 @@ export const VARIANTS: TuneVariant[] = [
 /** One line saying what a setting does, for the results list. */
 export function describe(t: ListenTuning): string {
   const parts = [t.beam ? 'beam search' : 'greedy', t.gain ? 'volume boost' : 'no boost'];
+  if (t.beam && t.words) parts.push('custom words');
   parts.push(t.gate ? `voice gate ${t.vadThreshold}, ${(t.pauseMs / 1000).toFixed(1)} s pause` : 'no voice gate');
   return parts.join(' · ');
 }
 
 export function sameTuning(a: ListenTuning | null | undefined, b: ListenTuning | null | undefined): boolean {
   if (!a || !b) return false;
-  return a.beam === b.beam && a.gain === b.gain && a.gate === b.gate && a.pauseMs === b.pauseMs && Math.abs(a.vadThreshold - b.vadThreshold) < 1e-6;
+  // Builds before custom words leave words out; that reads as the default (on).
+  const words = (t: ListenTuning) => t.words ?? true;
+  return (
+    a.beam === b.beam &&
+    a.gain === b.gain &&
+    a.gate === b.gate &&
+    a.pauseMs === b.pauseMs &&
+    words(a) === words(b) &&
+    Math.abs(a.vadThreshold - b.vadThreshold) < 1e-6
+  );
 }
 
 /**

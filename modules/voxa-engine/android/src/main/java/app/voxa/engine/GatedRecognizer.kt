@@ -13,17 +13,19 @@ import com.k2fsa.sherpa.onnx.Vad
  *
  * In a meeting much of the audio is silence or pauses, so this saves battery on long sessions.
  * With no [vad] every chunk is decoded and only the recognizer's endpoint rule ends sentences
- * (the settings test compares both). Not thread-safe: use from the one listening thread.
+ * (the settings test compares both). [hotwords] are custom words to boost, "/" between them
+ * (beam search only). Not thread-safe: use from the one listening thread.
  */
 class GatedRecognizer(
   private val recognizer: OnlineRecognizer,
   private val vad: Vad?,
   private val rate: Int,
   private val pauseMs: Int = PAUSE_MS,
+  private val hotwords: String = "",
 ) {
   class Result(val text: String, val final: Boolean, val startMs: Long, val endMs: Long)
 
-  private var stream = recognizer.createStream("")
+  private var stream = recognizer.createStream(hotwords)
   private val preRoll = ArrayDeque<FloatArray>()
   private var preRollSamples = 0
   private var speaking = false
@@ -87,7 +89,7 @@ class GatedRecognizer(
       val final = recognizer.getResult(stream).text.trim()
       if (final.isNotEmpty()) out(Result(final, true, segStartMs, now))
       stream.release()
-      stream = recognizer.createStream("")
+      stream = recognizer.createStream(hotwords)
       last = ""
       segStartMs = now
       if (paused) speaking = false

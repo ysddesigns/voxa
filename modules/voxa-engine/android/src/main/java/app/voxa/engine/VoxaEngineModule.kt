@@ -439,6 +439,16 @@ class VoxaEngineModule : Module() {
       ListenTuning.load(context).toMap()
     }
 
+    // Custom words for Live: the person's own and whether the built-in Nigerian list is on.
+    Function("listenWords") {
+      val s = ListenWords.load(context)
+      mapOf("builtIn" to s.builtIn, "custom" to s.custom, "builtInWords" to ListenWords.BUILT_IN)
+    }
+    Function("setListenWords") { builtIn: Boolean, custom: List<String> ->
+      val s = ListenWords.save(context, builtIn, custom)
+      mapOf("builtIn" to s.builtIn, "custom" to s.custom, "builtInWords" to ListenWords.BUILT_IN)
+    }
+
     AsyncFunction("benchmark") { promise: Promise ->
       thread(name = "voxa-bench") {
         try {
@@ -709,7 +719,7 @@ class VoxaEngineModule : Module() {
     recognizer = null
     val t0 = SystemClock.elapsedRealtime()
     val m = models(LISTEN_PACK, "asr", "encoder.onnx")
-    val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = beam))
+    val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = beam, vocab = listenVocab(m, beam)))
     asrLoadMs = SystemClock.elapsedRealtime() - t0
     recognizer = created
     asrBeam = beam
@@ -740,9 +750,9 @@ class VoxaEngineModule : Module() {
       var vad: Vad? = null
       var gate: GatedRecognizer? = null
       try {
-        r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = t.beam))
+        r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = t.beam, vocab = listenVocab(m, t.beam)))
         vad = if (t.gate) newVad(vadModel, t.vadThreshold) else null
-        val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs)
+        val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs, listenHotwords(t))
         gate = g
         val agc = if (t.gain) Agc() else null
         val finals = mutableListOf<String>()
@@ -777,7 +787,7 @@ class VoxaEngineModule : Module() {
    * A streaming transducer in a model folder holding encoder.onnx, decoder.onnx, joiner.onnx and
    * tokens.txt. modelType "" lets sherpa-onnx tell the kind (Zipformer, NeMo) from the model itself.
    */
-  private fun asrConfig(m: ModelDir, endpoint: Boolean, modelType: String = "", beam: Boolean = false) = OnlineRecognizerConfig(
+  private fun asrConfig(m: ModelDir, endpoint: Boolean, modelType: String = "", beam: Boolean = false, vocab: File? = null) = OnlineRecognizerConfig(
     featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80),
     modelConfig = OnlineModelConfig(
       transducer = OnlineTransducerModelConfig(
@@ -794,7 +804,26 @@ class VoxaEngineModule : Module() {
     // Beam search keeps 4 readings alive and picks the best phrase: fewer errors, a little more CPU.
     decodingMethod = if (beam) "modified_beam_search" else "greedy_search",
     maxActivePaths = 4,
-  )
+    hotwordsScore = ListenWords.SCORE,
+  ).apply {
+    // Custom words are given to sherpa-onnx as text; it splits them into the model's word pieces.
+    if (beam && vocab != null) {
+      modelConfig.modelingUnit = "bpe"
+      modelConfig.bpeVocab = vocab.path
+    }
+  }
+
+  /** The word-piece file custom words need (beam search only). */
+  private fun listenVocab(m: ModelDir, beam: Boolean): File? {
+    if (!beam) return null
+    return ListenWords.bpeVocab(context) {
+      m.assets?.open("${m.path}/tokens.txt")?.reader(Charsets.UTF_8) ?: File(m.path, "tokens.txt").reader(Charsets.UTF_8)
+    }
+  }
+
+  /** The custom words to boost with these settings, "/" between them; empty when off. */
+  private fun listenHotwords(t: ListenTuning): String =
+    if (t.beam && t.words) ListenWords.hotwords(ListenWords.active(context)) else ""
 
   /**
    * Listening-model comparison (Engine lab): runs each candidate on the same recording, fed in
@@ -1327,7 +1356,7 @@ class VoxaEngineModule : Module() {
 
       val tuning = ListenTuning.load(context)
       val vad = if (tuning.gate) newVad(tuning.vadThreshold) else null
-      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs)
+      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs, listenHotwords(tuning))
       val agc = if (tuning.gain) Agc() else null
       Log.i(TAG, "listening with $tuning")
       val buf = ShortArray(ASR_RATE / 10) // 100 ms

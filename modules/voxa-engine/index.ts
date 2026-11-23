@@ -111,7 +111,18 @@ export type NativeAsrCompareResult = {
 };
 
 /** How Live turns sound into words (see ListenTuning.kt). */
-export type ListenTuning = { beam: boolean; gain: boolean; vadThreshold: number; pauseMs: number; gate: boolean };
+export type ListenTuning = {
+  beam: boolean;
+  gain: boolean;
+  vadThreshold: number;
+  pauseMs: number;
+  gate: boolean;
+  /** Boost the custom words (needs beam). Builds from 25 Nov 2026; older ones leave it out. */
+  words?: boolean;
+};
+
+/** Custom words Live boosts (see ListenWords.kt). */
+export type ListenWords = { builtIn: boolean; custom: string[]; builtInWords: string[] };
 
 /** One variant's run in tuneAsr. */
 export type NativeAsrTuneResult = {
@@ -192,6 +203,10 @@ type VoxaEngineNative = {
   listenTuning?(): ListenTuning;
   /** Saves the settings Live uses (null: back to the defaults); returns what is now in use. */
   setListenTuning?(tuning: ListenTuning | null): ListenTuning;
+  /** Custom words for Live. Builds from 25 Nov 2026. */
+  listenWords?(): ListenWords;
+  /** Saves them; Live uses them from its next start. Returns what is saved (cleaned). */
+  setListenWords?(builtIn: boolean, custom: string[]): ListenWords;
   /** Scan text (ML Kit, offline). Builds from 22 Nov 2026. */
   recognizeText?(uri: string): Promise<NativeScanLine[]>;
   /** Listens for `minutes` with the screen allowed off; missing in builds made before 21 Nov 2026. */
