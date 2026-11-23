@@ -72,7 +72,9 @@ export function AndroidTabBar({ state, emitter, navigateToTab }: TabBarProps) {
           >
             <Icon name={meta.icon} color={tint} />
             {/* The bar has a fixed height, like the system's own tab bars: labels grow a little, not to 200%. */}
-            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[type.tab, { color: tint }]}>
+            {/* Full tab width, centred: sized to its own text, the label kept a width measured before the
+                app font loaded and showed "Ho…" once the wider font arrived. */}
+            <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[type.tab, { color: tint, alignSelf: 'stretch', textAlign: 'center' }]}>
               {meta.label}
             </Text>
           </Pressable>

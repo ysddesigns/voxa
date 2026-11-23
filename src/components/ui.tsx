@@ -218,14 +218,30 @@ export function InfoRow({ label, value }: { label: string; value: string }) {
 
 export function ToggleRow({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
   const { colors } = useTheme();
+  // The whole row flips the switch (a bigger target than the switch alone) and reads as one switch.
   return (
-    <View style={styles.row}>
+    <Pressable
+      onPress={() => onChange(!value)}
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      accessibilityState={{ checked: value }}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.highlight }]}
+    >
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[type.body, { color: colors.text }]}>{label}</Text>
         {hint ? <Text style={[type.footnote, { color: colors.textSecondary }]}>{hint}</Text> : null}
       </View>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} trackColor={{ true: colors.accent, false: colors.chipPressed }} thumbColor="#FFFFFF" />
-    </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        accessibilityLabel={label}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        trackColor={{ true: colors.accent, false: colors.chipPressed }}
+        thumbColor="#FFFFFF"
+      />
+    </Pressable>
   );
 }
 

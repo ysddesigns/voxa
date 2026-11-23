@@ -1045,9 +1045,15 @@ class VoxaEngineModule : Module() {
 
   /** "THE YELLOW LAMPS WOULD LIGHT UP" → "The yellow lamps would light up." */
   private fun punctuate(text: String): String {
+    // Kroko writes its own capitals and punctuation. Running the punctuation model on top doubled
+    // full stops ("myself.. I'll") and, since it starts from lowercase, could lose a name's capital.
+    if (writesOwnPunctuation(text)) return text
     val p = ensurePunct() ?: return text
     return try { p.addPunctuation(text.lowercase()) } catch (e: Throwable) { Log.e(TAG, "punctuation failed", e); text }
   }
+
+  /** Text that already has punctuation or capitals came from a model that writes them itself. */
+  private fun writesOwnPunctuation(text: String) = text.any { it in ".,?!;:" || it.isUpperCase() }
 
   private fun releaseModels() = synchronized(lock) {
     punct?.release(); punct = null; punctTried = false
