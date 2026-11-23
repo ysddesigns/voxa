@@ -35,7 +35,7 @@ export function addWords(list: string[], text: string): string[] {
   return cleanWords([...fresh, ...list]);
 }
 
-const EMPTY: ListenWords = { builtIn: true, custom: [], builtInWords: [] };
+const EMPTY: ListenWords = { builtIn: false, custom: [], builtInWords: [] };
 
 export type CustomWords = {
   /** False on builds and platforms without custom words. */

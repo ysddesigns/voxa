@@ -8,33 +8,44 @@ import java.io.File
  * Port Harcourt). With beam search on, sherpa-onnx gives each word's word pieces a bonus while
  * decoding, so a close-sounding reading of the name wins over common English ("Lagos", not "levels").
  *
- * Two parts: a built-in list of Nigerian places, names and words (on by default) and the
- * person's own words. Saved in SharedPreferences and read each time Live starts.
+ * Two parts: the person's own words and a built-in list of Nigerian places, names and words.
+ * Saved in SharedPreferences and read each time Live starts.
+ *
+ * The built-in list is off by default. On a Nigerian-English test reading through Live's own
+ * pipeline (voice gate on) it fixed nothing at 1.5 and from 2 up pushed parts of names into
+ * ordinary speech ("and Abuja" → "Ana Buja", from Anambra). A handful of names the person
+ * actually meets is the safer use; the settings test measures the list for whoever wants it.
  */
 object ListenWords {
   private const val PREFS = "voxa-listen-words"
   const val MAX_WORDS = 300
   const val MAX_LENGTH = 40
 
-  /** Default bonus per matched word piece ([ListenTuning.wordsScore] overrides it). */
+  /**
+   * Default bonus per matched word piece ([ListenTuning.wordsScore] overrides it). With the whole
+   * built-in list, 3 and above wrote names that were not said ("Before we" → "Bell you").
+   */
   const val SCORE = 1.5f
 
+  /**
+   * Short names and ones that start like common English (Edo, Oyo, Oga, Anambra, Ankara) are left
+   * out: their pieces match ordinary speech too easily.
+   */
   val BUILT_IN = listOf(
     // Country, languages, money
     "Nigeria", "Nigerian", "Naira", "Kobo", "Yoruba", "Hausa", "Igbo", "Fulani", "Ijaw", "Pidgin",
     // Cities and states
-    "Lagos", "Abuja", "Kano", "Ibadan", "Port Harcourt", "Enugu", "Kaduna", "Benin", "Jos", "Ilorin",
+    "Lagos", "Abuja", "Kano", "Ibadan", "Port Harcourt", "Enugu", "Kaduna", "Ilorin",
     "Abeokuta", "Onitsha", "Owerri", "Calabar", "Warri", "Maiduguri", "Sokoto", "Zaria", "Akure",
-    "Uyo", "Asaba", "Osogbo", "Ogun", "Oyo", "Anambra", "Delta", "Rivers", "Kwara", "Ekiti",
-    "Ondo", "Edo", "Imo", "Abia", "Plateau", "Bauchi", "Gombe", "Yola", "Minna", "Lokoja", "Makurdi",
+    "Asaba", "Osogbo", "Kwara", "Ekiti", "Bauchi", "Gombe", "Yola", "Minna", "Lokoja", "Makurdi",
     // Lagos and Abuja areas
-    "Ikeja", "Lekki", "Yaba", "Surulere", "Ikorodu", "Ajah", "Victoria Island", "Wuse", "Garki", "Maitama",
+    "Ikeja", "Lekki", "Yaba", "Surulere", "Ikorodu", "Victoria Island", "Wuse", "Garki", "Maitama",
     // Common names
     "Chinedu", "Emeka", "Ngozi", "Chioma", "Obinna", "Uche", "Ifeoma", "Amaka", "Chukwuemeka", "Nnamdi",
     "Tunde", "Bola", "Funmi", "Kemi", "Segun", "Femi", "Adebayo", "Oluwaseun", "Damilola", "Yetunde",
-    "Aisha", "Musa", "Ibrahim", "Fatima", "Yusuf", "Abubakar", "Halima", "Zainab", "Usman", "Bello",
+    "Aisha", "Musa", "Ibrahim", "Fatima", "Yusuf", "Abubakar", "Halima", "Zainab", "Usman",
     // Everyday words
-    "Jollof", "Danfo", "Okada", "Keke", "Suya", "Agbada", "Ankara", "Oga", "Wahala",
+    "Jollof", "Danfo", "Okada", "Suya", "Agbada", "Wahala",
   )
 
   data class Saved(val builtIn: Boolean, val custom: List<String>)
@@ -42,7 +53,7 @@ object ListenWords {
   fun load(context: Context): Saved {
     val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val custom = p.getString("custom", "").orEmpty().split('\n').filter { it.isNotBlank() }
-    return Saved(p.getBoolean("builtIn", true), custom)
+    return Saved(p.getBoolean("builtIn", false), custom)
   }
 
   fun save(context: Context, builtIn: Boolean, custom: List<String>): Saved {
@@ -60,14 +71,18 @@ object ListenWords {
     return clean(s.custom + if (s.builtIn) BUILT_IN else emptyList())
   }
 
+  /** The settings test's words: the person's own and always the built-in list, so it has a measure. */
+  fun forTest(context: Context): List<String> = clean(load(context).custom + BUILT_IN)
+
   /**
-   * sherpa-onnx's per-stream hotwords: one phrase per "/", each already split into the model's
-   * word pieces ("▁L a g o s :3.0"), so sherpa-onnx uses them as they are. A word with a letter
-   * the model does not know is left out.
+   * sherpa-onnx's per-stream hotwords: one phrase per "/", each with its bonus ("Lagos :3.0").
+   * sherpa-onnx splits them into word pieces with the [bpeVocab] file. Words already split into
+   * pieces ("▁L a g o s") were tried and had no effect in sherpa-onnx 2.0.1, so plain words it is.
+   * A word with a letter the model has no piece for is left out.
    */
   fun hotwords(words: List<String>, tokens: Map<String, Int>, score: Float): String {
     val s = String.format(java.util.Locale.US, "%.1f", score)
-    return clean(words).mapNotNull { pieces(tokens, it) }.joinToString("/") { "$it :$s" }
+    return clean(words).filter { pieces(tokens, it) != null }.joinToString("/") { "$it :$s" }
   }
 
   /** tokens.txt as piece → id, without the special entries (<blk>, #0). */

@@ -28,7 +28,7 @@ export default function CustomWordsScreen() {
         <View style={{ gap: 8 }}>
           <LargeTitle>Custom words</LargeTitle>
           <Text style={[type.subheadline, { color: colors.textSecondary, paddingHorizontal: 4 }]}>
-            Live captions listen out for these names and places, so “Chinedu” is not written as “Chin a do”. Changes apply the next time you start listening.
+            Live captions give these names and places extra weight, so they are more likely to be written the way you spell them. Changes apply the next time you start listening.
           </Text>
         </View>
 
@@ -87,7 +87,7 @@ export default function CustomWordsScreen() {
 
             <Group
               header="Built in"
-              footer="Nigerian cities, states, common names and everyday words. Turn off if Live starts writing them for words that only sound alike."
+              footer="Nigerian cities, states, common names and everyday words. Off by default: with this many words, Live sometimes writes part of a name for ordinary speech. Test it in Engine lab before relying on it."
               action={{ label: showBuiltIn ? 'Hide' : 'Show all', onPress: () => setShowBuiltIn((s) => !s) }}
             >
               <ToggleRow label="Nigerian names and places" value={words.builtIn} onChange={setBuiltIn} />

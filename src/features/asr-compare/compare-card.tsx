@@ -22,7 +22,7 @@ type Result = NativeAsrCompareResult & { name: string };
  * Engine lab: compare listening models on your own voice. Download the candidates, read the
  * passage once, then every downloaded model transcribes that same recording.
  */
-export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
+export function AsrCompareCard({ disabled, autoTune }: { disabled?: boolean; autoTune?: boolean }) {
   const { colors } = useTheme();
   const available = !!VoxaEngine?.compareAsr && !!packService;
 
@@ -98,6 +98,15 @@ export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
       setTuning(false);
     }
   };
+
+  // Dev builds: voxa://engine-lab?run=tune starts the settings test on the saved recording, so it
+  // can be run from a computer over USB. Results go to the log as VOXA_ASR_TUNE.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (!__DEV__ || !autoTune || autoRan.current || !canTune) return;
+    autoRan.current = true;
+    void testSettings();
+  });
 
   const applyToLive = (t: ListenTuning | null) => {
     if (!VoxaEngine?.setListenTuning) return;

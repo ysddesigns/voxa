@@ -752,7 +752,7 @@ class VoxaEngineModule : Module() {
       try {
         r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = t.beam, vocab = listenVocab(m, t.beam)))
         vad = if (t.gate) newVad(vadModel, t.vadThreshold) else null
-        val hotwords = listenHotwords(t, m)
+        val hotwords = listenHotwords(t, m, ListenWords.forTest(context))
         if (hotwords.isNotEmpty()) Log.i(TAG, "tune: $id words ${hotwords.count { it == '/' } + 1}: ${hotwords.take(160)}")
         val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs, hotwords)
         gate = g
@@ -824,10 +824,10 @@ class VoxaEngineModule : Module() {
   }
 
   /** The custom words to boost with these settings, split into word pieces; empty when off. */
-  private fun listenHotwords(t: ListenTuning, m: ModelDir): String {
-    if (!t.beam || !t.words) return ""
+  private fun listenHotwords(t: ListenTuning, m: ModelDir, words: List<String> = ListenWords.active(context)): String {
+    if (!t.beam || !t.words || words.isEmpty()) return ""
     return try {
-      ListenWords.hotwords(ListenWords.active(context), listenTokens(m), t.wordsScore)
+      ListenWords.hotwords(words, listenTokens(m), t.wordsScore)
     } catch (e: Throwable) {
       Log.w(TAG, "custom words skipped", e)
       ""

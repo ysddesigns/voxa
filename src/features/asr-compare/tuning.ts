@@ -19,8 +19,8 @@ export const VARIANTS: TuneVariant[] = [
   { id: 'beam', name: 'Beam search', tuning: { ...ORIGINAL_TUNING, beam: true } },
   { id: 'beam-gain', name: 'Beam search + volume boost', tuning: { ...DEFAULT_TUNING, words: false } },
   { id: 'beam-gain-words', name: 'Beam + boost + custom words (default)', tuning: DEFAULT_TUNING },
-  { id: 'beam-gain-words3', name: 'Beam + boost + custom words, stronger', tuning: { ...DEFAULT_TUNING, wordsScore: 3 } },
-  { id: 'beam-gain-words5', name: 'Beam + boost + custom words, strongest', tuning: { ...DEFAULT_TUNING, wordsScore: 5 } },
+  { id: 'beam-gain-words2', name: 'Beam + boost + custom words, stronger', tuning: { ...DEFAULT_TUNING, wordsScore: 2 } },
+  { id: 'beam-gain-words3', name: 'Beam + boost + custom words, strongest', tuning: { ...DEFAULT_TUNING, wordsScore: 3 } },
   {
     id: 'beam-gain-gentle',
     name: 'Beam + boost + gentler voice gate',

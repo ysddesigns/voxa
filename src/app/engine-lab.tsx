@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { nativeBenchmark } from '@/engines/native';
 import { AsrCompareCard } from '@/features/asr-compare/compare-card';
 import { parseLongTest, summarizeLongTest, type LongTestSummary } from '@/engines/native/long-test';
@@ -115,6 +116,7 @@ function rows(r: BenchmarkResult): Row[] {
 
 export default function EngineLab() {
   const { colors } = useTheme();
+  const { run } = useLocalSearchParams<{ run?: string }>();
   const { mode, setMode, deviceAvailable } = useEngineMode();
   const engines = useEngines();
   const { voices, defaultId, loading } = useVoices();
@@ -397,7 +399,7 @@ export default function EngineLab() {
 
       {/* Listening models */}
       <Text style={[type.overline, { color: colors.textSecondary }]}>Compare listening models</Text>
-      <AsrCompareCard disabled={listening || longRunning} />
+      <AsrCompareCard disabled={listening || longRunning} autoTune={run === 'tune'} />
 
       {/* Downloads */}
       <Text style={[type.overline, { color: colors.textSecondary }]}>Downloads</Text>
