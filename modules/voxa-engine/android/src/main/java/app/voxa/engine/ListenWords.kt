@@ -16,7 +16,7 @@ object ListenWords {
   const val MAX_WORDS = 300
   const val MAX_LENGTH = 40
 
-  /** Bonus per matched word piece. Higher finds more names but starts writing them for similar sounds. */
+  /** Default bonus per matched word piece ([ListenTuning.wordsScore] overrides it). */
   const val SCORE = 1.5f
 
   val BUILT_IN = listOf(
@@ -61,10 +61,62 @@ object ListenWords {
   }
 
   /**
-   * sherpa-onnx's per-stream hotwords: one phrase per "/". "/" and ":" have meanings there, so
-   * they are taken out of the words.
+   * sherpa-onnx's per-stream hotwords: one phrase per "/", each already split into the model's
+   * word pieces ("▁L a g o s :3.0"), so sherpa-onnx uses them as they are. A word with a letter
+   * the model does not know is left out.
    */
-  fun hotwords(words: List<String>): String = clean(words).joinToString("/")
+  fun hotwords(words: List<String>, tokens: Map<String, Int>, score: Float): String {
+    val s = String.format(java.util.Locale.US, "%.1f", score)
+    return clean(words).mapNotNull { pieces(tokens, it) }.joinToString("/") { "$it :$s" }
+  }
+
+  /** tokens.txt as piece → id, without the special entries (<blk>, #0). */
+  fun loadTokens(reader: java.io.Reader): Map<String, Int> = reader.use { r ->
+    r.readLines().mapNotNull { line ->
+      val parts = line.trim().split(Regex("\\s+"))
+      val id = parts.getOrNull(1)?.toIntOrNull()
+      if (parts.size != 2 || id == null || parts[0].startsWith("<") || parts[0].startsWith("#")) null else parts[0] to id
+    }.toMap()
+  }
+
+  /**
+   * A phrase as the model's word pieces, the way the model itself would write it. Kroko's
+   * vocabulary is SentencePiece Unigram with pieces ordered from most to least common, so the
+   * likeliest split is the one with the best total of -ln(rank) (Zipf's law), found by Viterbi.
+   * ("afternoon" → "▁after n o on", not "▁a f ter no on".) Null if a letter has no piece.
+   */
+  fun pieces(tokens: Map<String, Int>, phrase: String): String? {
+    val maxLen = tokens.keys.maxOfOrNull { it.length } ?: return null
+    val out = ArrayList<String>()
+    for (word in phrase.split(' ')) {
+      if (word.isEmpty()) continue
+      val t = "▁$word"
+      val n = t.length
+      val best = DoubleArray(n + 1) { Double.NEGATIVE_INFINITY }
+      val from = IntArray(n + 1) { -1 }
+      best[0] = 0.0
+      for (e in 1..n) {
+        for (s in maxOf(0, e - maxLen) until e) {
+          if (best[s] == Double.NEGATIVE_INFINITY) continue
+          val id = tokens[t.substring(s, e)] ?: continue
+          val v = best[s] - kotlin.math.ln(id + 1.0)
+          if (v > best[e]) {
+            best[e] = v
+            from[e] = s
+          }
+        }
+      }
+      if (best[n] == Double.NEGATIVE_INFINITY) return null
+      val word0 = ArrayList<String>()
+      var e = n
+      while (e > 0) {
+        word0.add(t.substring(from[e], e))
+        e = from[e]
+      }
+      out.addAll(word0.asReversed())
+    }
+    return out.takeIf { it.isNotEmpty() }?.joinToString(" ")
+  }
 
   /** Trimmed, single-spaced, at most [MAX_LENGTH] letters, no duplicates (ignoring case), at most [MAX_WORDS]. */
   fun clean(words: List<String>): List<String> {
@@ -80,10 +132,10 @@ object ListenWords {
   }
 
   /**
-   * sherpa-onnx turns hotwords into word pieces with a SentencePiece vocabulary file
-   * ("piece<TAB>score" per line). The Kroko model ships only tokens.txt ("piece id"), so the file
-   * is made from it: a BPE vocabulary's scores follow merge order, which is the token id order, so
-   * score = -id. Returns the file, or null if tokens.txt could not be read.
+   * sherpa-onnx will not take hotwords for a "bpe" model without a SentencePiece vocabulary file
+   * ("piece<TAB>score" per line), though [hotwords] hands it pieces already split. Kroko ships only
+   * tokens.txt ("piece id", most common first), so the file is made from it with score -ln(id + 1).
+   * Returns the file, or null if tokens.txt could not be read.
    */
   fun bpeVocab(context: Context, tokens: () -> java.io.Reader): File? = try {
     val out = File(context.filesDir, "listen-bpe.vocab")
@@ -91,7 +143,7 @@ object ListenWords {
       r.readLines().mapNotNull { line ->
         val parts = line.trim().split(Regex("\\s+"))
         val id = parts.getOrNull(1)?.toIntOrNull()
-        if (parts.size != 2 || id == null) null else "${parts[0]}\t${-id}"
+        if (parts.size != 2 || id == null) null else "${parts[0]}\t${String.format(java.util.Locale.US, "%.4f", -kotlin.math.ln(id + 1.0))}"
       }
     }
     if (lines.isEmpty()) null else {

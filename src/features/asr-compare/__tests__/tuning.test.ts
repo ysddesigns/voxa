@@ -20,7 +20,7 @@ describe('VARIANTS', () => {
 describe('describe', () => {
   it('says what each setting does', () => {
     expect(describeTuning(ORIGINAL_TUNING)).toBe('greedy · no boost · voice gate 0.5, 0.8 s pause');
-    expect(describeTuning({ ...DEFAULT_TUNING, gate: false })).toBe('beam search · volume boost · custom words · no voice gate');
+    expect(describeTuning({ ...DEFAULT_TUNING, gate: false })).toBe('beam search · volume boost · custom words 1.5 · no voice gate');
     expect(describeTuning({ ...DEFAULT_TUNING, words: false, gate: false })).toBe('beam search · volume boost · no voice gate');
   });
 });
@@ -31,7 +31,8 @@ describe('sameTuning', () => {
     expect(sameTuning(DEFAULT_TUNING, { ...DEFAULT_TUNING, pauseMs: 1200 })).toBe(false);
     expect(sameTuning(DEFAULT_TUNING, null)).toBe(false);
     expect(sameTuning(DEFAULT_TUNING, { ...DEFAULT_TUNING, words: false })).toBe(false);
-    expect(sameTuning(DEFAULT_TUNING, { ...DEFAULT_TUNING, words: undefined })).toBe(true);
+    expect(sameTuning(DEFAULT_TUNING, { ...DEFAULT_TUNING, words: undefined, wordsScore: undefined })).toBe(true);
+    expect(sameTuning(DEFAULT_TUNING, { ...DEFAULT_TUNING, wordsScore: 3 })).toBe(false);
   });
 });
 

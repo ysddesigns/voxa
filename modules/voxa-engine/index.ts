@@ -119,6 +119,8 @@ export type ListenTuning = {
   gate: boolean;
   /** Boost the custom words (needs beam). Builds from 25 Nov 2026; older ones leave it out. */
   words?: boolean;
+  /** How strongly: bonus per matched word piece, 0.5 to 8. Builds from 26 Nov 2026. */
+  wordsScore?: number;
 };
 
 /** Custom words Live boosts (see ListenWords.kt). */

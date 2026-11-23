@@ -752,7 +752,9 @@ class VoxaEngineModule : Module() {
       try {
         r = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = t.beam, vocab = listenVocab(m, t.beam)))
         vad = if (t.gate) newVad(vadModel, t.vadThreshold) else null
-        val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs, listenHotwords(t))
+        val hotwords = listenHotwords(t, m)
+        if (hotwords.isNotEmpty()) Log.i(TAG, "tune: $id words ${hotwords.count { it == '/' } + 1}: ${hotwords.take(160)}")
+        val g = GatedRecognizer(r, vad, ASR_RATE, t.pauseMs, hotwords)
         gate = g
         val agc = if (t.gain) Agc() else null
         val finals = mutableListOf<String>()
@@ -821,9 +823,25 @@ class VoxaEngineModule : Module() {
     }
   }
 
-  /** The custom words to boost with these settings, "/" between them; empty when off. */
-  private fun listenHotwords(t: ListenTuning): String =
-    if (t.beam && t.words) ListenWords.hotwords(ListenWords.active(context)) else ""
+  /** The custom words to boost with these settings, split into word pieces; empty when off. */
+  private fun listenHotwords(t: ListenTuning, m: ModelDir): String {
+    if (!t.beam || !t.words) return ""
+    return try {
+      ListenWords.hotwords(ListenWords.active(context), listenTokens(m), t.wordsScore)
+    } catch (e: Throwable) {
+      Log.w(TAG, "custom words skipped", e)
+      ""
+    }
+  }
+
+  private var tokensCache: Pair<String, Map<String, Int>>? = null
+
+  /** The listening model's tokens.txt, read once per model folder. */
+  private fun listenTokens(m: ModelDir): Map<String, Int> = synchronized(lock) {
+    tokensCache?.takeIf { it.first == m.path }?.let { return it.second }
+    val reader = m.assets?.open("${m.path}/tokens.txt")?.reader(Charsets.UTF_8) ?: File(m.path, "tokens.txt").reader(Charsets.UTF_8)
+    ListenWords.loadTokens(reader).also { tokensCache = m.path to it }
+  }
 
   /**
    * Listening-model comparison (Engine lab): runs each candidate on the same recording, fed in
@@ -1356,7 +1374,7 @@ class VoxaEngineModule : Module() {
 
       val tuning = ListenTuning.load(context)
       val vad = if (tuning.gate) newVad(tuning.vadThreshold) else null
-      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs, listenHotwords(tuning))
+      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs, listenHotwords(tuning, models(LISTEN_PACK, "asr", "encoder.onnx")))
       val agc = if (tuning.gain) Agc() else null
       Log.i(TAG, "listening with $tuning")
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
