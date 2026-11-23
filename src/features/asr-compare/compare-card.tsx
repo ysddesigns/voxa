@@ -326,7 +326,7 @@ export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
           <Text style={[type.headline, { color: colors.text }]}>Live settings</Text>
           <Text style={[type.footnote, { color: colors.textSecondary }]}>
             Now in use: {liveTuning ? describe(liveTuning) : 'unknown'}
-            {liveTuning && !sameTuning(liveTuning, DEFAULT_TUNING) ? ' (changed from the shipped settings)' : ''}
+            {liveTuning && !sameTuning(liveTuning, DEFAULT_TUNING) ? ' (changed from the default)' : ''}
           </Text>
           {tuneScored.rows.map((r) => {
             const inUse = sameTuning(r.tuning, liveTuning);
@@ -364,7 +364,7 @@ export function AsrCompareCard({ disabled }: { disabled?: boolean }) {
           })}
           {liveTuning && !sameTuning(liveTuning, DEFAULT_TUNING) && VoxaEngine?.setListenTuning ? (
             <Pressable onPress={() => applyToLive(null)} accessibilityRole="button" style={[styles.small, { backgroundColor: colors.chip, alignSelf: 'flex-start' }]}>
-              <Text style={[type.callout, { color: colors.text }]}>Back to shipped settings</Text>
+              <Text style={[type.callout, { color: colors.text }]}>Back to the default</Text>
             </Pressable>
           ) : null}
         </View>

@@ -96,6 +96,19 @@ class GatedRecognizer(
 
   /** Closes the last sentence when listening stops. The recognizer cannot be fed after this. */
   fun finish(out: (Result) -> Unit) {
+    // A short last word ("ten.") right before Stop may still be waiting for the VAD to confirm it.
+    // Ask the VAD to decide on what it has; if it was speech, decode the held audio too.
+    if (!speaking && vad != null && preRoll.isNotEmpty()) {
+      vad.flush()
+      if (!vad.empty()) {
+        speaking = true
+        segStartMs = ms(heardSamples - preRollSamples)
+        for (p in preRoll) decode(p)
+      }
+      while (!vad.empty()) vad.pop()
+      preRoll.clear()
+      preRollSamples = 0
+    }
     if (speaking) {
       flush()
       val text = recognizer.getResult(stream).text.trim()

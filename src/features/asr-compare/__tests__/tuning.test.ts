@@ -1,8 +1,9 @@
-import { DEFAULT_TUNING, VARIANTS, describe as describeTuning, pickBest, sameTuning } from '../tuning';
+import { DEFAULT_TUNING, ORIGINAL_TUNING, VARIANTS, describe as describeTuning, pickBest, sameTuning } from '../tuning';
 
 describe('VARIANTS', () => {
-  it('starts with the shipped settings and has unique ids', () => {
-    expect(VARIANTS[0].tuning).toEqual(DEFAULT_TUNING);
+  it('starts with the original settings, includes the default, and has unique ids', () => {
+    expect(VARIANTS[0].tuning).toEqual(ORIGINAL_TUNING);
+    expect(VARIANTS.some((v) => sameTuning(v.tuning, DEFAULT_TUNING))).toBe(true);
     expect(new Set(VARIANTS.map((v) => v.id)).size).toBe(VARIANTS.length);
   });
 
@@ -18,8 +19,8 @@ describe('VARIANTS', () => {
 
 describe('describe', () => {
   it('says what each setting does', () => {
-    expect(describeTuning(DEFAULT_TUNING)).toBe('greedy · no boost · voice gate 0.5, 0.8 s pause');
-    expect(describeTuning({ ...DEFAULT_TUNING, beam: true, gain: true, gate: false })).toBe('beam search · volume boost · no voice gate');
+    expect(describeTuning(ORIGINAL_TUNING)).toBe('greedy · no boost · voice gate 0.5, 0.8 s pause');
+    expect(describeTuning({ ...DEFAULT_TUNING, gate: false })).toBe('beam search · volume boost · no voice gate');
   });
 });
 

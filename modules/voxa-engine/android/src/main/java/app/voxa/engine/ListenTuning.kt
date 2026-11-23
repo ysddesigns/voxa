@@ -5,9 +5,13 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * How Live turns sound into words. The defaults are the settings Voxa shipped with; the Engine
- * lab's settings test scores variants on the person's own recording and can save the best one,
- * which Live then uses (no rebuild needed).
+ * How Live turns sound into words. The Engine lab's settings test scores variants on the person's
+ * own recording and can save the best one, which Live then uses (no rebuild needed).
+ *
+ * Defaults since 24 Nov 2026: beam search and the volume boost. On a Nigerian-English reading of
+ * the test passage, beam search cut word error by about 2 points at the same speed; the boost
+ * changed nothing for a close voice and is there for the far side of a meeting table. The voice
+ * gate stays: without it the model writes words for room noise and runs through every silence.
  *
  * - beam: modified beam search over 4 paths instead of greedy search (more accurate, a little slower).
  * - gain: [Agc] raises quiet speech (far side of a meeting table) before recognition.
@@ -17,8 +21,8 @@ import kotlin.math.sqrt
  *   sentences by the recognizer's own endpoint rule.
  */
 data class ListenTuning(
-  val beam: Boolean = false,
-  val gain: Boolean = false,
+  val beam: Boolean = true,
+  val gain: Boolean = true,
   val vadThreshold: Float = 0.5f,
   val pauseMs: Int = GatedRecognizer.PAUSE_MS,
   val gate: Boolean = true,

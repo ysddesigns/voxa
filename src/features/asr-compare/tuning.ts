@@ -5,22 +5,25 @@ import type { ListenTuning } from '../../../modules/voxa-engine';
  * variant, each transcript is scored, and the best can be saved as the settings Live uses.
  */
 
-/** What Voxa shipped with. Must match ListenTuning's defaults in ListenTuning.kt. */
-export const DEFAULT_TUNING: ListenTuning = { beam: false, gain: false, vadThreshold: 0.5, pauseMs: 800, gate: true };
+/** Live's default settings. Must match ListenTuning's defaults in ListenTuning.kt. */
+export const DEFAULT_TUNING: ListenTuning = { beam: true, gain: true, vadThreshold: 0.5, pauseMs: 800, gate: true };
+
+/** The first release's settings, kept as the baseline the others are measured against. */
+export const ORIGINAL_TUNING: ListenTuning = { beam: false, gain: false, vadThreshold: 0.5, pauseMs: 800, gate: true };
 
 export type TuneVariant = { id: string; name: string; tuning: ListenTuning };
 
 /** Each step adds one change to the one before, so the scores show what each change is worth. */
 export const VARIANTS: TuneVariant[] = [
-  { id: 'shipped', name: 'As shipped', tuning: DEFAULT_TUNING },
-  { id: 'beam', name: 'Beam search', tuning: { ...DEFAULT_TUNING, beam: true } },
-  { id: 'beam-gain', name: 'Beam search + volume boost', tuning: { ...DEFAULT_TUNING, beam: true, gain: true } },
+  { id: 'shipped', name: 'Original', tuning: ORIGINAL_TUNING },
+  { id: 'beam', name: 'Beam search', tuning: { ...ORIGINAL_TUNING, beam: true } },
+  { id: 'beam-gain', name: 'Beam search + volume boost (default)', tuning: DEFAULT_TUNING },
   {
     id: 'beam-gain-gentle',
     name: 'Beam + boost + gentler voice gate',
-    tuning: { ...DEFAULT_TUNING, beam: true, gain: true, vadThreshold: 0.35, pauseMs: 1200 },
+    tuning: { ...DEFAULT_TUNING, vadThreshold: 0.35, pauseMs: 1200 },
   },
-  { id: 'beam-gain-open', name: 'Beam + boost, no voice gate', tuning: { ...DEFAULT_TUNING, beam: true, gain: true, gate: false } },
+  { id: 'beam-gain-open', name: 'Beam + boost, no voice gate', tuning: { ...DEFAULT_TUNING, gate: false } },
 ];
 
 /** One line saying what a setting does, for the results list. */
