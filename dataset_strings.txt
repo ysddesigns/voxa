@@ -1,0 +1,59 @@
+`Hate Speech`
+`./dataset._slug-CJV_ZBQ7.js`
+`HausaNLP`
+`NaijaData — Nigerian Language Datasets, Indexed`
+`HausaNLP / Masakhane`
+`HausaHate`
+`https://lacunafund.org/datasets/language/`
+`Election results, government spending, public policy datasets.`
+`Hausa Fake News Corpus`
+`Speech/ASR`
+`2,000 annotated comments from West African Facebook pages for binary hate speech classification.`
+`First large-scale human-annotated Twitter sentiment dataset for four major Nigerian languages. ~30,000 tweets per language.`
+`audioworklet`
+`Know a Nigerian language dataset that should be indexed? Submit it to NaijaData.`
+`Browse Datasets — NaijaData`
+`NaijaData — Find Nigerian Language Datasets`
+`Yoruba`
+`,getParentRoute:()=>tg}),AboutRoute:bg,AdminRoute:yg,BrowseRoute:vg,SubmitRoute:_g,DatasetSlugRoute:gg.update({id:`
+`All verified Nigerian language datasets in one searchable directory.`
+`,{})},this.timeout)}hasReceived(e){return this.receivedResp&&this.receivedResp.status===e}trigger(e,t){this.channel.trigger(this.refEvent,{status:e,response:t})}},ql=class{constructor(e,t){this.callback=e,this.timerCalc=t,this.timer=void 0,this.tries=0}reset(){this.tries=0,clearTimeout(this.timer)}scheduleTimeout(){clearTimeout(this.timer),this.timer=setTimeout(()=>{this.tries+=1,this.callback()},this.timerCalc(this.tries+1))}},Jl=class{constructor(e,t,n){this.state=K.closed,this.topic=e,this.params=Rl(t||{}),this.socket=n,this.bindings=[],this.bindingRef=0,this.timeout=this.socket.timeout,this.joinedOnce=!1,this.joinPush=new Kl(this,q.join,this.params,this.timeout),this.pushBuffer=[],this.stateChangeRefs=[],this.rejoinTimer=new ql(()=>{this.socket.isConnected()&&this.rejoin()},this.socket.rejoinAfterMs),this.stateChangeRefs.push(this.socket.onError(()=>this.rejoinTimer.reset())),this.stateChangeRefs.push(this.socket.onOpen(()=>{this.rejoinTimer.reset(),this.isErrored()&&this.rejoin()})),this.joinPush.receive(`
+`Explore verified Nigerian language datasets indexed from across the web. Filter by language, task, and source.`
+`Dataset for hate speech detection against Fulani Herdsmen in Nigeria.`
+`/dataset/$slug`
+`1,867 hours of speech and text data from 5,000+ speakers. Largest ever multi-speaker African speech dataset.`
+`,...m,...Xh(l,u)},onBlur:e=>{O.current&&!e.currentTarget.contains(e.relatedTarget)&&(O.current=!1,ce.current&&=(ce.current.focus({preventScroll:!0}),null))},onFocus:e=>{e.target instanceof HTMLElement&&e.target.dataset.dismissible===`
+`||O.current||(O.current=!0,ce.current=e.relatedTarget)},onMouseEnter:()=>E(!0),onMouseMove:()=>E(!0),onMouseLeave:()=>{re||E(!1)},onDragEnd:()=>E(!1),onPointerDown:e=>{e.target instanceof HTMLElement&&e.target.dataset.dismissible===`
+`Ibom Dataset`
+"assets/DatasetCard-CCjUD7ws.js"
+`Verified NLP datasets for Hausa, Igbo, Yoruba, Pidgin and more — indexed in one place for researchers and developers.`
+`https://www.researchgate.net/publication/360112708_The_First_Corpus_for_Detecting_Fake_News_in_Hausa_Language`
+`Submit a Dataset — NaijaData`
+`Hausa`
+`,children:r.children},i),c=vi(c,i,n,null),c.flags|=2,r.return=t,c.return=t,r.sibling=c,t.child=r,Ua(t,e.child,null,n),r=t.child,r.memoizedState=wc(n),r.childLanes=Tc(e,s,n),t.memoizedState=Cc,t=pc(null,r)):(po(t),t.child=e.child,t.flags|=128,t=null);else if(lo(t),cf(c)){if(s=c.nextSibling&&c.nextSibling.dataset,s)var u=s.dgst;s=u,r=Error(a(419)),r.stack=`
+`./dataset._slug-BjUK0j-3.js`
+`Dataset`
+"assets/dataset._slug-CJV_ZBQ7.js"
+"assets/dataset._slug-BjUK0j-3.js"
+`,Kl=class{constructor(e,t,n,r){this.channel=e,this.event=t,this.payload=n||function(){return{}},this.receivedResp=null,this.timeout=r,this.timeoutTimer=null,this.recHooks=[],this.sent=!1,this.ref=void 0}resend(e){this.timeout=e,this.reset(),this.send()}send(){this.hasReceived(`
+`Igbo`
+`NLP dataset for four minority Nigerian languages extending Flores-200 for machine translation and topic classification.`
+`hausahate`
+`First corpus for detecting fake news in Hausa language. Available for download on ResearchGate.`
+`NER dataset covering 10 African languages including four Nigerian languages. Annotated by Masakhane community volunteers.`
+`),i=r.length?r[r.length-1]:null,a=i,o=0;o<r.length;o++){var s=r[o];if(s.dataset.precedence===t)a=s;else if(a!==i)break}a?a.parentNode.insertBefore(e,a.nextSibling):(t=n.nodeType===9?n.head:n,t.insertBefore(e,t.firstChild))}function Bf(e,t){e.crossOrigin??=t.crossOrigin,e.referrerPolicy??=t.referrerPolicy,e.title??=t.title}function $(e,t){e.crossOrigin??=t.crossOrigin,e.referrerPolicy??=t.referrerPolicy,e.integrity??=t.integrity}var Vf=null;function Hf(e,t,n){if(Vf===null){var r=new Map,i=Vf=new Map;i.set(n,r)}else i=Vf,r=i.get(n),r||(r=new Map,i.set(n,r));if(r.has(e))return r;for(r.set(e,null),n=n.getElementsByTagName(e),i=0;i<n.length;i++){var a=n[i];if(!(a[bt]||a[pt]||e===`
+`https://github.com/hausanlp/HausaNLP`
+`Open directory of verified Nigerian language datasets for NLP and AI research.`
+`)&&(n.set(o.dataset.precedence,o),r=o)}r&&n.set(null,r)}i=t.instance,o=i.getAttribute(`
+`https://github.com/hausanlp/NaijaSenti`
+`hausa-fake-news-corpus`
+`https://naijadata.lovable.app/dataset/${t.slug}`
+`)||(this.startTimeout(),this.sent=!0,this.channel.socket.push({topic:this.channel.topic,event:this.event,payload:this.payload(),ref:this.ref,join_ref:this.channel.joinRef()}))}receive(e,t){return this.hasReceived(e)&&t(this.receivedResp.response),this.recHooks.push({status:e,callback:t}),this}reset(){this.cancelRefEvent(),this.ref=null,this.refEvent=null,this.receivedResp=null,this.sent=!1}destroy(){this.cancelRefEvent(),this.cancelTimeout()}matchReceive({status:e,response:t,_ref:n}){this.recHooks.filter(t=>t.status===e).forEach(e=>e.callback(t))}cancelRefEvent(){this.refEvent&&this.channel.off(this.refEvent)}cancelTimeout(){clearTimeout(this.timeoutTimer),this.timeoutTimer=null}startTimeout(){this.timeoutTimer&&this.cancelTimeout(),this.ref=this.channel.socket.makeRef(),this.refEvent=this.channel.replyEventName(this.ref),this.channel.on(this.refEvent,e=>{this.cancelRefEvent(),this.cancelTimeout(),this.receivedResp=e,this.matchReceive(e)}),this.timeoutTimer=setTimeout(()=>{this.trigger(`
+"assets/dataset._slug-Be9ciFJZ.js"
+`audio`
+`https://github.com/hausanlp/HERDPhobia`
+`First sentiment classification dataset for Nollywood movie reviews across five Nigerian languages.`
+`Why NaijaData exists: centralizing, verifying, and opening up Nigerian datasets so African AI is built on African data.`
+`./dataset._slug-Be9ciFJZ.js`
+`Help grow the open directory of Nigerian datasets.`
+`ibom-dataset`
