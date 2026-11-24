@@ -17,6 +17,7 @@ import { usePrefs } from '@/features/settings/prefs';
 import { shouldShowTip } from '@/features/settings/battery-guide';
 import { useBattery } from '@/features/settings/use-battery';
 import { formatClock } from '@/features/listen/format';
+import { VoxaEngine } from '../../../modules/voxa-engine';
 import type { TranscriptSegment } from '@/engines/types';
 import type { Mark } from '@/storage/sessions';
 
@@ -39,9 +40,34 @@ function Ready() {
   const { speech } = useEngines();
   // The listening model takes several seconds to load: start now so tapping Listen is quick.
   const listenReady = models.ready.listen;
+  const [modelState, setModelState] = useState(() => VoxaEngine?.modelStatus?.() ?? null);
+  const [tuning, setTuning] = useState(() => VoxaEngine?.listenTuning?.() ?? null);
+
   useEffect(() => {
     if (listenReady) speech.warmUp?.();
   }, [listenReady, speech]);
+
+  useEffect(() => {
+    setModelState(VoxaEngine?.modelStatus?.() ?? null);
+  }, [listenReady]);
+
+  const toggleModel = () => {
+    if (!VoxaEngine?.setListenTuning) return;
+    const current = modelState?.activeListenModel ?? 'kroko';
+    const next = current === 'omnilingual' ? 'kroko' : 'omnilingual';
+    const updated = VoxaEngine.setListenTuning({
+      beam: tuning?.beam ?? true,
+      gain: tuning?.gain ?? true,
+      vadThreshold: tuning?.vadThreshold ?? 0.35,
+      pauseMs: tuning?.pauseMs ?? 1200,
+      gate: tuning?.gate ?? true,
+      words: tuning?.words ?? true,
+      wordsScore: tuning?.wordsScore ?? 1.3,
+      model: next,
+    });
+    setTuning(updated);
+    setModelState(VoxaEngine.modelStatus?.() ?? null);
+  };
   return (
     <Screen title="Live" overline="Listen">
       {l.recovered.length > 0 ? (
@@ -66,15 +92,43 @@ function Ready() {
           Voxa writes down what it hears, on this phone, with no internet. It keeps listening with the screen off. Everything is saved as it goes.
         </Text>
         {models.ready.listen ? (
-          <Button
-            label="Start Listening"
-            icon="mic"
-            accent
-            onPress={() => {
-              l.clearError();
-              void l.start();
-            }}
-          />
+          <>
+            {modelState?.hasOmnilingual ? (
+              <Pressable
+                onPress={toggleModel}
+                accessibilityRole="button"
+                accessibilityLabel={`Listening model: ${modelState.activeListenModel === 'omnilingual' ? 'Omnilingual' : 'Kroko English'}. Tap to switch.`}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: colors.chip,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: radius.md,
+                }}
+              >
+                <View style={{ gap: 2, flex: 1 }}>
+                  <Text style={[type.caption, { color: colors.textSecondary }]}>Listening model</Text>
+                  <Text style={[type.subheadline, { color: colors.text, fontWeight: '600' }]}>
+                    {modelState.activeListenModel === 'omnilingual'
+                      ? 'Omnilingual (Hausa, Yoruba, Igbo, Pidgin)'
+                      : 'Kroko English (Streaming)'}
+                  </Text>
+                </View>
+                <Text style={[type.caption, { color: colors.accentText, fontWeight: '600', marginLeft: 8 }]}>Switch</Text>
+              </Pressable>
+            ) : null}
+            <Button
+              label="Start Listening"
+              icon="mic"
+              accent
+              onPress={() => {
+                l.clearError();
+                void l.start();
+              }}
+            />
+          </>
         ) : (
           <>
             <Text style={[type.subheadline, { color: colors.text }]}>First, a one-time download. After that Live works with no internet.</Text>

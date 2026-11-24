@@ -2,7 +2,10 @@ package app.voxa.engine
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityManager
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -17,6 +20,7 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Debug
+import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
@@ -78,8 +82,17 @@ private const val LONG_TEST_FILE = "long-test.jsonl"
 /** Model packs (src/features/packs/catalogue.ts): listening (ASR + VAD) and speaker labels. */
 /** Kroko English (chosen 22 Nov 2026 over Zipformer 20M, which was "listen-en": deleted on first use). */
 private const val LISTEN_PACK = "listen-en-kroko"
+/** Voxa's fine-tuned Nigerian multilingual streaming model. */
+private const val LISTEN_PACK_NG = "listen-ng"
+/** Whole-sentence multilingual model covering Hausa, Yoruba, Igbo, Pidgin, and English. */
+private const val PACK_OMNILINGUAL = "lab-asr-omnilingual-300m"
 /** Packs no catalogue lists any more: the old listening model, and Kroko's lab copy (now LISTEN_PACK). */
 private val OLD_PACKS = listOf("listen-en", "lab-asr-kroko")
+/** Rough memory a loaded model takes (ONNX weights + runtime), for the warm-up's free-memory check. */
+private const val ASR_MB = 160
+private const val TTS_MB = 120
+/** Kept free after a warm-up load, so the screen and the system keep room to breathe. */
+private const val WARM_HEADROOM_MB = 150
 private const val SPEAKERS_PACK = "speakers"
 /** Clustering threshold for meetings: 0.5 found 7 speakers in a 4-speaker clip, so start higher. Tune on real meetings. */
 private const val LABEL_THRESHOLD = 0.6f
@@ -117,6 +130,8 @@ class VoxaEngineModule : Module() {
   /** Whether [recognizer] was built with beam search (rebuilt when the saved tuning changes). */
   private var asrBeam = false
   private var asrLoadMs = 0L
+  @Volatile private var offlineRecognizer: OfflineRecognizer? = null
+  @Volatile private var offlineLoadedModel: String? = null
   private var punct: OnlinePunctuation? = null
   private var punctTried = false
 
@@ -140,6 +155,10 @@ class VoxaEngineModule : Module() {
   /** A Listen session owns the notification (and its service) from start to stop, pauses included. */
   @Volatile private var noticeActive = false
   @Volatile private var labelCancel = false
+  /** Speech and audio exports using the voice right now; an idle voice may be freed under memory pressure. */
+  private val ttsUsers = AtomicInteger(0)
+  @Volatile private var warmThread: Thread? = null
+  private var memoryCallbacks: ComponentCallbacks2? = null
 
   private class Sentence(val start: Int, val end: Int, val text: String, val speed: Float = 1f, val gain: Float = 1f, val pauseMs: Int = 0)
   /** How to read one stretch of the text (script refinements: style, emphasis, pauses). */
@@ -157,6 +176,73 @@ class VoxaEngineModule : Module() {
     OnCreate {
       ListenService.onAction = { action -> sendEvent("onListenAction", mapOf("action" to action)) }
       SpeakService.onAction = { action, positionMs -> sendEvent("onSpeakAction", mapOf("action" to action, "positionMs" to positionMs)) }
+      // Models loaded ahead of time must never get the app killed: when Android runs short of
+      // memory, free the ones not in use. The app loads them again when it comes back.
+      val callbacks = object : ComponentCallbacks2 {
+        override fun onTrimMemory(level: Int) {
+          @Suppress("DEPRECATION")
+          val pressed = level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+          if (pressed) releaseIdleModels("trim level $level")
+        }
+        override fun onConfigurationChanged(newConfig: Configuration) {}
+        @Deprecated("Deprecated in Java")
+        override fun onLowMemory() = releaseIdleModels("low memory")
+      }
+      appContext.reactContext?.applicationContext?.let {
+        it.registerComponentCallbacks(callbacks)
+        memoryCallbacks = callbacks
+      }
+    }
+
+    // Startup warm-up: loads what the next tap will need, one model at a time, on a low-priority
+    // thread so the screen stays smooth. jobs: "listen" (speech recognition, punctuation, custom
+    // words) and/or "voice:<id>" ("voice:" = built-in). A job is skipped when the phone does not
+    // have the memory to spare. Resolves with what is loaded. Builds from 25 Nov 2026.
+    AsyncFunction("prewarm") { jobs: List<String>, promise: Promise ->
+      if (warmThread?.isAlive == true) {
+        promise.resolve(mapOf("listen" to false, "voice" to false, "busy" to true))
+        return@AsyncFunction
+      }
+      warmThread = thread(name = "voxa-warm") {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+        var listenDone = false
+        var voiceDone = false
+        for (job in jobs) {
+          try {
+            if (job == "listen") {
+              if (synchronized(lock) { recognizer != null || offlineRecognizer != null } || roomFor(ASR_MB)) {
+                for (old in OLD_PACKS) if (packs.installed().contains(old)) packs.delete(old)
+                val kind = currentListenModel()
+                if (kind == "omnilingual") {
+                  ensureOfflineAsr(PACK_OMNILINGUAL)
+                } else {
+                  ensureAsr()
+                  listenHotwords(ListenTuning.load(context), models(listenPack(), "asr", "encoder.onnx"))
+                }
+                ensurePunct()
+                listenDone = true
+              } else {
+                Log.i(TAG, "warm-up: not enough free memory for the listening model")
+              }
+            } else if (job.startsWith("voice:")) {
+              val voice = job.removePrefix("voice:")
+              val loaded = synchronized(lock) { tts != null }
+              // Never swap out a voice that is already loaded (it may be speaking).
+              if (loaded || roomFor(TTS_MB)) {
+                if (!loaded) ensureTts(voice)
+                voiceDone = true
+              } else {
+                Log.i(TAG, "warm-up: not enough free memory for the voice")
+              }
+            }
+          } catch (e: Throwable) {
+            Log.w(TAG, "warm-up '$job' failed; it loads on first use instead", e)
+          }
+        }
+        promise.resolve(mapOf("listen" to listenDone, "voice" to voiceDone, "busy" to false))
+      }
     }
 
     // The Listen notification: title, listening or paused, time listened (the system keeps the
@@ -200,7 +286,12 @@ class VoxaEngineModule : Module() {
       thread(name = "voxa-asr-load") {
         try {
           for (old in OLD_PACKS) if (packs.installed().contains(old)) packs.delete(old)
-          ensureAsr()
+          val kind = currentListenModel()
+          if (kind == "omnilingual") {
+            ensureOfflineAsr(PACK_OMNILINGUAL)
+          } else {
+            ensureAsr()
+          }
           promise.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
         } catch (e: Throwable) {
           Log.e(TAG, "listening model load failed", e)
@@ -228,7 +319,7 @@ class VoxaEngineModule : Module() {
     // voice: "" for the built-in voice, or the id of an installed voice pack.
     Function("speak") { id: Int, text: String, sid: Int, speed: Double, overrides: Map<String, String>, fallbacks: Map<String, String>, voice: String ->
       val gen = speakGen.incrementAndGet()
-      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice) }
+      thread(name = "voxa-tts") { usingTts { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice) } }
       Unit
     }
 
@@ -248,7 +339,7 @@ class VoxaEngineModule : Module() {
         )
       }
       val gen = speakGen.incrementAndGet()
-      thread(name = "voxa-tts") { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice, pieces) }
+      thread(name = "voxa-tts") { usingTts { runSpeak(id, gen, text, sid, speed.toFloat(), overrides, fallbacks, voice, pieces) } }
       Unit
     }
 
@@ -452,7 +543,7 @@ class VoxaEngineModule : Module() {
     AsyncFunction("benchmark") { promise: Promise ->
       thread(name = "voxa-bench") {
         try {
-          promise.resolve(runBenchmark())
+          promise.resolve(usingTts { runBenchmark() })
         } catch (e: Throwable) {
           promise.reject("E_BENCHMARK", e.message ?: "Benchmark failed", e)
         }
@@ -580,7 +671,7 @@ class VoxaEngineModule : Module() {
         exportCancelled = false
         thread(name = "voxa-export") {
           try {
-            promise.resolve(runExport(text, options, dest))
+            promise.resolve(usingTts { runExport(text, options, dest) })
           } catch (e: Throwable) {
             Log.e(TAG, "export failed", e)
             promise.reject("E_EXPORT", if (exportCancelled) "Cancelled" else (e.message ?: "Could not make the audio file"), e)
@@ -639,6 +730,8 @@ class VoxaEngineModule : Module() {
       // The app (or its JS) is going away: no one is left to answer the notification's buttons.
       ListenService.onAction = null
       SpeakService.onAction = null
+      memoryCallbacks?.let { cb -> try { appContext.reactContext?.applicationContext?.unregisterComponentCallbacks(cb) } catch (_: Throwable) {} }
+      memoryCallbacks = null
       try { appContext.reactContext?.let { SpeakService.stop(it) } } catch (_: Throwable) {}
       noticeActive = false
       try { appContext.reactContext?.let { ListenService.stop(it) } } catch (_: Throwable) {}
@@ -713,12 +806,53 @@ class VoxaEngineModule : Module() {
     maxNumSentences = 1,
   )
 
+  /** Active listening pack: uses Nigerian model (listen-ng) if installed, otherwise Kroko English (listen-en-kroko). */
+  private fun listenPack(): String = when {
+    hasPack(LISTEN_PACK_NG, "encoder.onnx") -> LISTEN_PACK_NG
+    else -> LISTEN_PACK
+  }
+
+  /** Active listening model: "omnilingual" (whole-sentence multilingual), "voxa-ng" (streaming Nigerian), or "kroko" (streaming English). */
+  private fun currentListenModel(): String {
+    val pref = ListenTuning.load(context).model
+    return when {
+      pref == "omnilingual" && hasPack(PACK_OMNILINGUAL, "model.int8.onnx") -> "omnilingual"
+      pref == "voxa-ng" && hasPack(LISTEN_PACK_NG, "encoder.onnx") -> "voxa-ng"
+      pref == "kroko" -> "kroko"
+      hasPack(LISTEN_PACK_NG, "encoder.onnx") -> "voxa-ng"
+      hasPack(PACK_OMNILINGUAL, "model.int8.onnx") -> "omnilingual"
+      else -> "kroko"
+    }
+  }
+
+  private fun ensureOfflineAsr(id: String): OfflineRecognizer = synchronized(lock) {
+    if (offlineRecognizer != null && offlineLoadedModel == id) return offlineRecognizer!!
+    offlineRecognizer?.release()
+    offlineRecognizer = null
+    recognizer?.release()
+    recognizer = null
+    val t0 = SystemClock.elapsedRealtime()
+    val dir = packs.dir(id).path
+    val model = OfflineModelConfig(
+      omnilingual = OfflineOmnilingualAsrCtcModelConfig(model = "$dir/model.int8.onnx"),
+      tokens = "$dir/tokens.txt",
+      numThreads = 2,
+      provider = "cpu",
+    )
+    val r = OfflineRecognizer(config = OfflineRecognizerConfig(featConfig = FeatureConfig(sampleRate = ASR_RATE, featureDim = 80), modelConfig = model))
+    asrLoadMs = SystemClock.elapsedRealtime() - t0
+    offlineRecognizer = r
+    offlineLoadedModel = id
+    r
+  }
+
   private fun ensureAsr(): OnlineRecognizer = synchronized(lock) {
     val beam = ListenTuning.load(context).beam
     recognizer?.let { if (asrBeam == beam) return it else it.release() }
     recognizer = null
     val t0 = SystemClock.elapsedRealtime()
-    val m = models(LISTEN_PACK, "asr", "encoder.onnx")
+    val packId = listenPack()
+    val m = models(packId, "asr", "encoder.onnx")
     val created = OnlineRecognizer(assetManager = m.assets, config = asrConfig(m, endpoint = true, beam = beam, vocab = listenVocab(m, beam)))
     asrLoadMs = SystemClock.elapsedRealtime() - t0
     recognizer = created
@@ -739,8 +873,9 @@ class VoxaEngineModule : Module() {
       recognizer?.release()
       recognizer = null
     }
-    val m = models(LISTEN_PACK, "asr", "encoder.onnx")
-    val vadModel = models(LISTEN_PACK, "vad", "silero_vad.onnx")
+    val packId = listenPack()
+    val m = models(packId, "asr", "encoder.onnx")
+    val vadModel = models(packId, "vad", "silero_vad.onnx")
     val step = ASR_RATE / 10
     return variants.map { v ->
       val id = v["id"]?.toString().orEmpty()
@@ -869,7 +1004,7 @@ class VoxaEngineModule : Module() {
       try {
         // Only the listening pack may fall back to the bundled model; a candidate must be its own download.
         val m = when {
-          id == LISTEN_PACK -> models(id, "asr", "encoder.onnx")
+          id == LISTEN_PACK || id == LISTEN_PACK_NG -> models(id, "asr", "encoder.onnx")
           hasPack(id, "encoder.onnx") -> ModelDir(null, packs.dir(id).path)
           else -> throw MissingPack(id)
         }
@@ -1055,10 +1190,50 @@ class VoxaEngineModule : Module() {
   /** Text that already has punctuation or capitals came from a model that writes them itself. */
   private fun writesOwnPunctuation(text: String) = text.any { it in ".,?!;:" || it.isUpperCase() }
 
+  private inline fun <T> usingTts(block: () -> T): T {
+    ttsUsers.incrementAndGet()
+    try { return block() } finally { ttsUsers.decrementAndGet() }
+  }
+
+  /** Enough free memory to load a model of about [mb] MB and still stay clear of Android's low-memory line. */
+  private fun roomFor(mb: Int): Boolean {
+    val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return true
+    val info = ActivityManager.MemoryInfo()
+    am.getMemoryInfo(info)
+    val spare = info.availMem - info.threshold
+    return !info.lowMemory && spare > (mb + WARM_HEADROOM_MB) * 1024L * 1024L
+  }
+
+  /** Frees the models nothing is using (not listening, not speaking or exporting). */
+  private fun releaseIdleModels(why: String) {
+    synchronized(lock) {
+      var freed = ""
+      // A paused Listen session keeps its model, so Resume is instant.
+      if (!listening && !noticeActive) {
+        if (recognizer != null) {
+          recognizer?.release(); recognizer = null
+          punct?.release(); punct = null; punctTried = false
+          freed += " listening"
+        }
+        if (offlineRecognizer != null) {
+          offlineRecognizer?.release(); offlineRecognizer = null; offlineLoadedModel = null
+          punct?.release(); punct = null; punctTried = false
+          freed += " offline-listening"
+        }
+      }
+      if (ttsUsers.get() == 0 && tts != null) {
+        synchronized(genLock) { tts?.release() }; tts = null; ttsVoice = ""
+        freed += " voice"
+      }
+      if (freed.isNotEmpty()) Log.i(TAG, "freed idle models ($why):$freed")
+    }
+  }
+
   private fun releaseModels() = synchronized(lock) {
     punct?.release(); punct = null; punctTried = false
     synchronized(genLock) { tts?.release() }; tts = null; tokenizer = null; ttsVoice = ""
     recognizer?.release(); recognizer = null
+    offlineRecognizer?.release(); offlineRecognizer = null; offlineLoadedModel = null
   }
 
   // --- Speak ---------------------------------------------------------------------
@@ -1370,19 +1545,24 @@ class VoxaEngineModule : Module() {
         it.parentFile?.mkdirs()
         java.io.BufferedOutputStream(java.io.FileOutputStream(it, true), 64 * 1024)
       }
-      val r = ensureAsr()
+      val modelKind = currentListenModel()
+      val tuning = ListenTuning.load(context)
+      val vad = if (tuning.gate) newVad(tuning.vadThreshold) else null
+      val gate: ListeningGate = if (modelKind == "omnilingual") {
+        val offR = ensureOfflineAsr(PACK_OMNILINGUAL)
+        OfflineGatedRecognizer(offR, vad, ASR_RATE, tuning.pauseMs)
+      } else {
+        val r = ensureAsr()
+        GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs, listenHotwords(tuning, models(listenPack(), "asr", "encoder.onnx")))
+      }
       val minBuf = AudioRecord.getMinBufferSize(ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
       rec = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, ASR_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, max(minBuf, ASR_RATE))
       if (rec.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("The microphone is busy")
       rec.startRecording()
-      started.resolve(mapOf("loadMs" to asrLoadMs.toDouble()))
+      started.resolve(mapOf("loadMs" to asrLoadMs.toDouble(), "model" to modelKind))
       resolved = true
-
-      val tuning = ListenTuning.load(context)
-      val vad = if (tuning.gate) newVad(tuning.vadThreshold) else null
-      val gate = GatedRecognizer(r, vad, ASR_RATE, tuning.pauseMs, listenHotwords(tuning, models(LISTEN_PACK, "asr", "encoder.onnx")))
       val agc = if (tuning.gain) Agc() else null
-      Log.i(TAG, "listening with $tuning")
+      Log.i(TAG, "listening with model $modelKind and $tuning")
       val buf = ShortArray(ASR_RATE / 10) // 100 ms
       val bytes = ByteArray(buf.size * 2)
       var segment = 0
@@ -1615,7 +1795,7 @@ class VoxaEngineModule : Module() {
 
   /** Silero VAD for 16 kHz audio. Small (2 MB) and fast, so each listening session makes its own. */
   private fun newVad(threshold: Float = 0.5f): Vad {
-    val m = models(LISTEN_PACK, "vad", "silero_vad.onnx")
+    val m = models(listenPack(), "vad", "silero_vad.onnx")
     return newVad(m, threshold)
   }
 
@@ -1662,10 +1842,12 @@ class VoxaEngineModule : Module() {
 
   /** Which model sets are ready, bundled or downloaded. */
   private fun modelStatus() = mapOf(
-    "listen" to (hasPack(LISTEN_PACK, "encoder.onnx") || assetExists("$MODELS/asr/encoder.onnx")),
+    "listen" to (hasPack(LISTEN_PACK_NG, "encoder.onnx") || hasPack(PACK_OMNILINGUAL, "model.int8.onnx") || hasPack(LISTEN_PACK, "encoder.onnx") || assetExists("$MODELS/asr/encoder.onnx")),
     "speakers" to (hasPack(SPEAKERS_PACK, "embedding.onnx") || assetExists("$MODELS/diar/embedding.onnx")),
     "bundledListen" to assetExists("$MODELS/asr/encoder.onnx"),
     "bundledSpeakers" to assetExists("$MODELS/diar/embedding.onnx"),
+    "activeListenModel" to currentListenModel(),
+    "hasOmnilingual" to hasPack(PACK_OMNILINGUAL, "model.int8.onnx"),
   )
 
   private fun runBenchmark(): Map<String, Any> {

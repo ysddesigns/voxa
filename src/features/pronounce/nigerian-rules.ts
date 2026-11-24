@@ -67,9 +67,9 @@ const DIGRAPHS = ['gb', 'kp', 'gw', 'kw', 'nw', 'ny', 'ch', 'sh', 'gh', 'ts', 'k
 const NASALS = new Set(['m', 'n', 'ṅ']);
 const ARABIC_FIRST = new Set(['b', 'd', 'f', 'h', 'k', 'l', 'm', 'n', 'r', 's']);
 
-const YORUBA_NAMES = /^(olu|oluwa|ade|ayo|ola|femi|fola|funmi|bola|tunde|seun|yemi|kemi|tolu|dayo|sola|bisi|gbenga|wale|kunle|segun|tobi|tayo|ife|ibadan|ogun|oyo|osun|ekiti|abeokuta|ilorin|eko)/;
-const IGBO_NAMES = /^(chi|chukwu|uche|ngozi|obi|eze|ike|ifeanyi|nna|nne|emeka|ugo|amaka|adaeze|obinna|chidi|nkem|ebuka|onitsha|enugu|nnewi|owerri|aba)/;
-const HAUSA_NAMES = /^(abdul|abu|yusuf|musa|aisha|fatima|ibrahim|aliyu|usman|umar|garba|sani|bello|hassan|hussaini|kabir|maryam|zainab|hauwa|sule|idris|yakubu|halima|bashir|lawal|danjuma|kano|kaduna|zaria|sokoto|katsina|bauchi|maiduguri|abuja)/;
+const YORUBA_NAMES = /^(olu|oluwa|ade|ayo|ola|femi|fola|funmi|bola|tunde|seun|yemi|kemi|tolu|dayo|sola|bisi|gbenga|wale|kunle|segun|tobi|tayo|ife|baba|buko|abim|omot|ibadan|ogun|oyo|osun|ekiti|abeokuta|ilorin|eko)/;
+const IGBO_NAMES = /^(chi|chukwu|uche|ngozi|obi|eze|ike|ifeanyi|nna|nne|emeka|ugo|amaka|adaeze|obinna|chidi|nkem|ebuka|kele|somto|onitsha|enugu|nnewi|owerri|aba)/;
+const HAUSA_NAMES = /^(abdul|abu|yusuf|musa|aisha|fatima|ibrahim|aliyu|usman|umar|garba|sani|bello|hassan|hussaini|kabir|maryam|zainab|hauwa|sule|idris|yakubu|halima|bashir|lawal|danjuma|amin|must|bilk|hadi|sanu|nasi|kano|kaduna|zaria|sokoto|katsina|bauchi|maiduguri|abuja)/;
 
 /** True when the word's letters and clusters fit Yoruba, Igbo or Hausa spelling. */
 export function looksNigerian(letters: Letter[]): boolean {

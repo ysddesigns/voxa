@@ -6,6 +6,7 @@ Readers:
   - commonvoice-ng: the same, keeping only speakers who describe their accent as Nigerian. Use it on
     the English folder: the full set is mostly American and British speakers.
   - fleurs: an extracted Google FLEURS language folder ({split}.tsv + audio/{split}/).
+  - naijavoices: an extracted NaijaVoices folder or metadata CSV/TSV file (from naijadata.vercel.app).
   - jsonl: Voxa's own format, one JSON object a line. Voxa recordings, teacher labels and any
     dataset converted by hand (NaijaVoices, AfriSpeech, WAXAL, Pidgin 1.0) use it:
       {"id": "...", "audio": "path/to/file.wav", "text": "...", "speaker": "...",
@@ -112,6 +113,53 @@ def read_fleurs(folder: Path, language: str) -> Iterator[Utterance]:
         raise FileNotFoundError(f"No train.tsv, dev.tsv or test.tsv in {folder}")
 
 
+def read_naijavoices(folder_or_file: Path, language: str) -> Iterator[Utterance]:
+    """
+    NaijaVoices (naijadata.vercel.app / Hugging Face): CSV/TSV metadata or directory.
+    Columns: audio/file_name/path, text/sentence/transcript, speaker/speaker_id.
+    """
+    language = check_language(language)
+    if folder_or_file.is_file():
+        meta_file = folder_or_file
+        audio_dir = folder_or_file.parent
+    else:
+        candidates = ["metadata.csv", "metadata.tsv", "train.csv", "validated.tsv"]
+        found = None
+        for c in candidates:
+            p = folder_or_file / c
+            if p.is_file():
+                found = p
+                break
+        if not found:
+            raise FileNotFoundError(f"No metadata file ({', '.join(candidates)}) found in {folder_or_file}")
+        meta_file = found
+        audio_dir = folder_or_file / "audio" if (folder_or_file / "audio").is_dir() else folder_or_file
+
+    delimiter = "\t" if meta_file.suffix == ".tsv" else ","
+    with meta_file.open(encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter=delimiter)
+        for i, row in enumerate(reader, 1):
+            clip = row.get("audio") or row.get("file_name") or row.get("path") or f"{i}.wav"
+            audio_path = (audio_dir / clip).resolve()
+            text = row.get("text") or row.get("sentence") or row.get("transcript") or ""
+            speaker = row.get("speaker") or row.get("speaker_id") or f"nv-{language}-{i}"
+            duration = None
+            if "duration" in row and row["duration"]:
+                try:
+                    duration = float(row["duration"])
+                except ValueError:
+                    pass
+            yield Utterance(
+                id=f"nv-{language}-{i:07d}",
+                audio=audio_path,
+                text=text,
+                speaker=str(speaker),
+                language=language,
+                source="naijavoices",
+                duration=duration,
+            )
+
+
 def read_jsonl(path: Path, language: Optional[str] = None, source: Optional[str] = None) -> Iterator[Utterance]:
     """language: used when a line has none. source: a name for reports (default: the file's name)."""
     base = path.parent
@@ -155,6 +203,8 @@ def read_source(spec: str) -> Iterator[Utterance]:
         return read_commonvoice(path, language, nigerian_only=True)
     if kind == "fleurs":
         return read_fleurs(path, language)
+    if kind == "naijavoices":
+        return read_naijavoices(path, language)
     if kind == "jsonl":
         return read_jsonl(path, language or None)
-    raise ValueError(f"Unknown source kind {kind!r} in {spec!r}: use commonvoice, commonvoice-ng, fleurs or jsonl")
+    raise ValueError(f"Unknown source kind {kind!r} in {spec!r}: use commonvoice, commonvoice-ng, fleurs, naijavoices or jsonl")

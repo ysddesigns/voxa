@@ -20,9 +20,13 @@ export type Prefs = {
   noticeCaptions: boolean;
   /** Closed the Live screen tip about battery savers stopping Listen (Android). */
   batteryTipDismissed: boolean;
+  /** What the person did last ('' = nothing yet), so a low-memory phone warms up that model first. */
+  lastUsed: LastUsed;
 };
 
-export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false, readCaptions: false, noticeCaptions: false, batteryTipDismissed: false };
+export type LastUsed = '' | 'listen' | 'speak';
+
+export const DEFAULT_PREFS: Prefs = { discreet: false, theme: 'system', voiceId: '', favourites: [], allowMobileData: false, onboarded: false, readCaptions: false, noticeCaptions: false, batteryTipDismissed: false, lastUsed: '' };
 
 const PATH = 'prefs.json';
 const THEMES: readonly ThemePref[] = ['system', 'light', 'dark'];
@@ -46,6 +50,7 @@ export function parsePrefs(text: string | null): Prefs {
     readCaptions: bool('readCaptions'),
     noticeCaptions: bool('noticeCaptions'),
     batteryTipDismissed: bool('batteryTipDismissed'),
+    lastUsed: raw.lastUsed === 'listen' || raw.lastUsed === 'speak' ? raw.lastUsed : '',
   };
 }
 

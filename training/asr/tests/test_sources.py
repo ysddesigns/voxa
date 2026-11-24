@@ -57,3 +57,22 @@ def test_unknown_language_is_refused_with_the_line_number():
             assert ":1:" in str(e)
         else:
             raise AssertionError("expected a ValueError")
+
+
+def test_naijavoices_source_reads_csv_metadata_and_resolves_audio():
+    with tempfile.TemporaryDirectory() as d:
+        folder = Path(d)
+        (folder / "metadata.csv").write_text(
+            "audio,text,speaker,duration\n"
+            "clip_01.wav,Ina kwana,spk_ha_01,2.5\n"
+            "clip_02.wav,Bawo ni,spk_yo_01,1.8\n",
+            encoding="utf-8",
+        )
+        rows = list(read_source(f"naijavoices:{folder}:ha"))
+        assert len(rows) == 2
+        assert rows[0].id == "nv-ha-0000001"
+        assert rows[0].text == "Ina kwana"
+        assert rows[0].speaker == "spk_ha_01"
+        assert rows[0].duration == 2.5
+        assert rows[0].audio == (folder / "clip_01.wav").resolve()
+        assert rows[0].source == "naijavoices"

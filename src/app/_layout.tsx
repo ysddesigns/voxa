@@ -12,6 +12,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { VoxaThemeProvider, useTheme } from '@/design/theme';
 import { EngineProvider } from '@/engines/provider';
+import { useStartupWarmUp } from '@/engines/warm-up';
 import { ListenSessionProvider } from '@/features/listen/listen-session';
 import { SpeakSessionProvider } from '@/features/speak/speak-session';
 import { ModelsProvider } from '@/features/packs/models';
@@ -23,6 +24,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function Root() {
   const { colors, scheme } = useTheme();
+  useStartupWarmUp();
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />

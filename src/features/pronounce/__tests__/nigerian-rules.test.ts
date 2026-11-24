@@ -19,6 +19,9 @@ describe('language detection', () => {
     ['ƙasa', 'hausa'],
     ['Ɗanjuma', 'hausa'],
     ["Ta'a", 'hausa'],
+    ['Babajide', 'yoruba'],
+    ['Kelechi', 'igbo'],
+    ['Mustapha', 'hausa'],
   ])('%s is %s', (word, language) => {
     expect(detectLanguage(word)?.language).toBe(language);
   });

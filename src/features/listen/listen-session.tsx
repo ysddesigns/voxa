@@ -88,7 +88,7 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
     [speech, store, summary],
   );
 
-  const { prefs } = usePrefs();
+  const { prefs, update } = usePrefs();
 
   // After every stop (from the app or the notification's Stop button): reload lists, and run
   // speaker labels straight away while the phone is otherwise idle (when the speaker-label models
@@ -107,7 +107,11 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
     () => ({
       ...state,
       elapsedMs: () => recorder.elapsedMs(),
-      start: () => recorder.start({ noticeCaptions: prefs.noticeCaptions }),
+      start: () => {
+        // Remembered so a low-memory phone warms up the listening model first next time.
+        if (prefs.lastUsed !== 'listen') update({ lastUsed: 'listen' });
+        return recorder.start({ noticeCaptions: prefs.noticeCaptions });
+      },
       pause: () => recorder.pause(),
       resume: () => recorder.resume(),
       mark: (l?: string) => {
@@ -124,7 +128,7 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
       version,
       bump,
     }),
-    [state, recorder, stop, speech, labelling, label, recovered, version, bump, prefs.noticeCaptions],
+    [state, recorder, stop, speech, labelling, label, recovered, version, bump, prefs.noticeCaptions, prefs.lastUsed, update],
   );
 
   return <ListenContext.Provider value={value}>{children}</ListenContext.Provider>;

@@ -6,7 +6,7 @@ import type { ListenTuning } from '../../../modules/voxa-engine';
  */
 
 /** Live's default settings. Must match ListenTuning's defaults in ListenTuning.kt. */
-export const DEFAULT_TUNING: ListenTuning = { beam: true, gain: true, vadThreshold: 0.5, pauseMs: 800, gate: true, words: true, wordsScore: 1.5 };
+export const DEFAULT_TUNING: ListenTuning = { beam: true, gain: true, vadThreshold: 0.35, pauseMs: 1200, gate: true, words: true, wordsScore: 1.3 };
 
 /** The first release's settings, kept as the baseline the others are measured against. */
 export const ORIGINAL_TUNING: ListenTuning = { beam: false, gain: false, vadThreshold: 0.5, pauseMs: 800, gate: true, words: false, wordsScore: 1.5 };
@@ -19,12 +19,12 @@ export const VARIANTS: TuneVariant[] = [
   { id: 'beam', name: 'Beam search', tuning: { ...ORIGINAL_TUNING, beam: true } },
   { id: 'beam-gain', name: 'Beam search + volume boost', tuning: { ...DEFAULT_TUNING, words: false } },
   { id: 'beam-gain-words', name: 'Beam + boost + custom words (default)', tuning: DEFAULT_TUNING },
-  { id: 'beam-gain-words2', name: 'Beam + boost + custom words, stronger', tuning: { ...DEFAULT_TUNING, wordsScore: 2 } },
-  { id: 'beam-gain-words3', name: 'Beam + boost + custom words, strongest', tuning: { ...DEFAULT_TUNING, wordsScore: 3 } },
+  { id: 'beam-gain-words2', name: 'Beam + boost + custom words, stronger', tuning: { ...DEFAULT_TUNING, wordsScore: 1.8 } },
+  { id: 'beam-gain-words3', name: 'Beam + boost + custom words, strongest', tuning: { ...DEFAULT_TUNING, wordsScore: 2.5 } },
   {
-    id: 'beam-gain-gentle',
-    name: 'Beam + boost + gentler voice gate',
-    tuning: { ...DEFAULT_TUNING, vadThreshold: 0.35, pauseMs: 1200 },
+    id: 'beam-gain-tight',
+    name: 'Beam + boost + tighter voice gate',
+    tuning: { ...DEFAULT_TUNING, vadThreshold: 0.5, pauseMs: 800 },
   },
   { id: 'beam-gain-open', name: 'Beam + boost, no voice gate', tuning: { ...DEFAULT_TUNING, gate: false } },
 ];
@@ -32,7 +32,7 @@ export const VARIANTS: TuneVariant[] = [
 /** One line saying what a setting does, for the results list. */
 export function describe(t: ListenTuning): string {
   const parts = [t.beam ? 'beam search' : 'greedy', t.gain ? 'volume boost' : 'no boost'];
-  if (t.beam && t.words !== false) parts.push(`custom words ${t.wordsScore ?? 1.5}`);
+  if (t.beam && t.words !== false) parts.push(`custom words ${t.wordsScore ?? 1.3}`);
   parts.push(t.gate ? `voice gate ${t.vadThreshold}, ${(t.pauseMs / 1000).toFixed(1)} s pause` : 'no voice gate');
   return parts.join(' · ');
 }
@@ -47,7 +47,8 @@ export function sameTuning(a: ListenTuning | null | undefined, b: ListenTuning |
     a.gate === b.gate &&
     a.pauseMs === b.pauseMs &&
     words(a) === words(b) &&
-    Math.abs((a.wordsScore ?? 1.5) - (b.wordsScore ?? 1.5)) < 1e-6 &&
+    (a.model ?? 'auto') === (b.model ?? 'auto') &&
+    Math.abs((a.wordsScore ?? 1.3) - (b.wordsScore ?? 1.3)) < 1e-6 &&
     Math.abs(a.vadThreshold - b.vadThreshold) < 1e-6
   );
 }

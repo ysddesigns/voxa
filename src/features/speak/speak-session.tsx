@@ -92,8 +92,13 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [wordIndex, setWordIndex] = useState(0);
   const [saying, setSaying] = useState<string | null>(null);
-  const { prefs } = usePrefs();
+  const { prefs, update } = usePrefs();
   const output = prefs.discreet ? 'private' : 'room';
+  // Remembered (saved only when it changes) so a low-memory phone warms up the voice first next time.
+  const lastUsed = prefs.lastUsed;
+  const markUsed = useCallback(() => {
+    if (lastUsed !== 'speak') update({ lastUsed: 'speak' });
+  }, [lastUsed, update]);
 
   const [style, setStyle] = useState<Style>('neutral');
   const [sayAs, setSayAsState] = useState<SayAs>({});
@@ -133,6 +138,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       setWordIndex(start);
       setError(null);
       setStatus('playing');
+      markUsed();
       handle.current = engine.speak(plan.spoken, { voiceId: withVoice, rate: atRate, output, pieces: plan.pieces }, (e) => {
         if (gen !== generation.current) return;
         if (e.type === 'word') setWordIndex(wordAtChar(words, plan.toOriginal(e.charStart)));
@@ -147,7 +153,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [engine, halt, words, parsed, rate, effectiveVoice, output],
+    [engine, halt, words, parsed, rate, effectiveVoice, output, markUsed],
   );
 
   const say = useCallback(
@@ -159,6 +165,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
       const gen = generation.current;
       setError(null);
       setSaying(phrase);
+      markUsed();
       const p = parseScript(phrase, 'neutral', sayAs);
       handle.current = engine.speak(p.spoken, { voiceId: effectiveVoice, rate, output, pieces: p.pieces }, (e) => {
         if (gen !== generation.current) return;
@@ -169,7 +176,7 @@ export function SpeakSessionProvider({ children }: { children: ReactNode }) {
         }
       });
     },
-    [engine, halt, saying, status, effectiveVoice, rate, output, sayAs],
+    [engine, halt, saying, status, effectiveVoice, rate, output, sayAs, markUsed],
   );
 
   const trySound = useCallback(

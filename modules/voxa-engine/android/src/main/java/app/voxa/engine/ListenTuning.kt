@@ -26,11 +26,12 @@ import kotlin.math.sqrt
 data class ListenTuning(
   val beam: Boolean = true,
   val gain: Boolean = true,
-  val vadThreshold: Float = 0.5f,
+  val vadThreshold: Float = 0.35f,
   val pauseMs: Int = GatedRecognizer.PAUSE_MS,
   val gate: Boolean = true,
   val words: Boolean = true,
   val wordsScore: Float = ListenWords.SCORE,
+  val model: String = "auto",
 ) {
   fun toMap(): Map<String, Any> = mapOf(
     "beam" to beam,
@@ -40,6 +41,7 @@ data class ListenTuning(
     "gate" to gate,
     "words" to words,
     "wordsScore" to wordsScore.toDouble(),
+    "model" to model,
   )
 
   companion object {
@@ -56,6 +58,7 @@ data class ListenTuning(
         gate = m["gate"] as? Boolean ?: d.gate,
         words = m["words"] as? Boolean ?: d.words,
         wordsScore = (num("wordsScore") ?: d.wordsScore.toDouble()).toFloat().coerceIn(0.5f, 8f),
+        model = m["model"] as? String ?: d.model,
       )
     }
 
@@ -70,6 +73,7 @@ data class ListenTuning(
         gate = p.getBoolean("gate", d.gate),
         words = p.getBoolean("words", d.words),
         wordsScore = p.getFloat("wordsScore", d.wordsScore),
+        model = p.getString("model", d.model) ?: d.model,
       )
     }
 
@@ -82,6 +86,7 @@ data class ListenTuning(
         .putBoolean("gate", t.gate)
         .putBoolean("words", t.words)
         .putFloat("wordsScore", t.wordsScore)
+        .putString("model", t.model)
         .apply()
     }
 

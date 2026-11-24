@@ -22,10 +22,10 @@ object ListenWords {
   const val MAX_LENGTH = 40
 
   /**
-   * Default bonus per matched word piece ([ListenTuning.wordsScore] overrides it). With the whole
-   * built-in list, 3 and above wrote names that were not said ("Before we" → "Bell you").
+   * Default bonus per matched word piece ([ListenTuning.wordsScore] overrides it). 1.3 provides
+   * a focused boost without hallucinating names on phonetically similar ordinary words.
    */
-  const val SCORE = 1.5f
+  const val SCORE = 1.3f
 
   /**
    * Short names and ones that start like common English (Edo, Oyo, Oga, Anambra, Ankara) are left
@@ -34,18 +34,28 @@ object ListenWords {
   val BUILT_IN = listOf(
     // Country, languages, money
     "Nigeria", "Nigerian", "Naira", "Kobo", "Yoruba", "Hausa", "Igbo", "Fulani", "Ijaw", "Pidgin",
-    // Cities and states
+    // Cities, states and major hubs
     "Lagos", "Abuja", "Kano", "Ibadan", "Port Harcourt", "Enugu", "Kaduna", "Ilorin",
     "Abeokuta", "Onitsha", "Owerri", "Calabar", "Warri", "Maiduguri", "Sokoto", "Zaria", "Akure",
     "Asaba", "Osogbo", "Kwara", "Ekiti", "Bauchi", "Gombe", "Yola", "Minna", "Lokoja", "Makurdi",
-    // Lagos and Abuja areas
-    "Ikeja", "Lekki", "Yaba", "Surulere", "Ikorodu", "Victoria Island", "Wuse", "Garki", "Maitama",
-    // Common names
+    "Katsina", "Jigawa", "Kebbi", "Zamfara", "Nasarawa", "Damaturu", "Benin City", "Abakaliki",
+    "Umuahia", "Birnin Kebbi", "Ijebu Ode", "Ogbomoso", "Nsukka", "Keffi",
+    // Neighborhoods and districts (Lagos, Abuja, PH)
+    "Ikeja", "Lekki", "Yaba", "Surulere", "Ikorodu", "Victoria Island", "Ajah", "Festac", "Apapa",
+    "Oshodi", "Agege", "Maryland", "Magodo", "Wuse", "Garki", "Maitama", "Asokoro", "Gwarinpa",
+    "Kubwa", "Jabi", "Lugbe", "Nyanya", "Trans Amadi", "Rumuokoro",
+    // Common names (Igbo, Yoruba, Hausa/Northern, Niger Delta)
     "Chinedu", "Emeka", "Ngozi", "Chioma", "Obinna", "Uche", "Ifeoma", "Amaka", "Chukwuemeka", "Nnamdi",
+    "Kelechi", "Chidiebere", "Chukwuma", "Nkechi", "Chibuzor", "Chiamaka", "Ikenna", "Chidinma", "Somtochukwu", "Ebuka", "Chizoba", "Onyinye",
     "Tunde", "Bola", "Funmi", "Kemi", "Segun", "Femi", "Adebayo", "Oluwaseun", "Damilola", "Yetunde",
-    "Aisha", "Musa", "Ibrahim", "Fatima", "Yusuf", "Abubakar", "Halima", "Zainab", "Usman",
-    // Everyday words
-    "Jollof", "Danfo", "Okada", "Suya", "Agbada", "Wahala",
+    "Babajide", "Olumide", "Omotola", "Adekunle", "Folashade", "Kehinde", "Taiwo", "Babatunde", "Olayinka", "Bukola", "Abimbola", "Ayodele",
+    "Aisha", "Musa", "Ibrahim", "Fatima", "Yusuf", "Abubakar", "Halima", "Zainab", "Usman", "Aliyu", "Bello", "Shehu",
+    "Aminu", "Suleiman", "Balarabe", "Danladi", "Mustapha", "Bilkisu", "Hadiza", "Maryam", "Zubairu", "Sanusi", "Nasiru", "Garba",
+    "Osaze", "Osamwonyi", "Oghenekaro", "Akpobome", "Tamuno",
+    // Everyday words, foods & greetings
+    "Jollof", "Danfo", "Okada", "Suya", "Agbada", "Wahala", "Sannu", "Nagode", "Barka",
+    "Keke Napep", "Owambe", "Babanriga", "Kunu", "Zobo", "Kuli Kuli", "Puff Puff", "Chin Chin",
+    "Abeg", "Biko", "Ndewo", "Bawo ni", "E kaaro", "E ku irole",
   )
 
   data class Saved(val builtIn: Boolean, val custom: List<String>)
@@ -133,11 +143,34 @@ object ListenWords {
     return out.takeIf { it.isNotEmpty() }?.joinToString(" ")
   }
 
+  /** Folds Hausa hooked letters and strips tone marks so words match subword tokens. */
+  fun normalize(text: String): String {
+    val nfd = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+    val stripped = nfd.replace(Regex("[\\u0300-\\u036f]"), "")
+    val sb = StringBuilder(stripped.length)
+    for (ch in stripped) {
+      when (ch) {
+        'ɓ' -> sb.append('b')
+        'Ɓ' -> sb.append('B')
+        'ɗ' -> sb.append('d')
+        'Ɗ' -> sb.append('D')
+        'ƙ' -> sb.append('k')
+        'Ƙ' -> sb.append('K')
+        'ƴ' -> sb.append('y')
+        'Ƴ' -> sb.append('Y')
+        '’' -> sb.append('\'')
+        else -> sb.append(ch)
+      }
+    }
+    return sb.toString()
+  }
+
   /** Trimmed, single-spaced, at most [MAX_LENGTH] letters, no duplicates (ignoring case), at most [MAX_WORDS]. */
   fun clean(words: List<String>): List<String> {
     val seen = HashSet<String>()
     val out = ArrayList<String>()
-    for (w in words) {
+    for (raw in words) {
+      val w = normalize(raw)
       val c = w.replace(Regex("[/:\\n\\r\\t]"), " ").replace(Regex("\\s+"), " ").trim().take(MAX_LENGTH).trim()
       if (c.isEmpty() || !seen.add(c.lowercase())) continue
       out.add(c)

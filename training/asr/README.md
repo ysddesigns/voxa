@@ -44,6 +44,7 @@ speed and memory, which a server cannot.
   describe their accent as Nigerian (or Yoruba, Hausa, Igbo, Pidgin). The rest is mostly American
   and British speakers
 - `fleurs:/data/fleurs/ha_ng:ha`: an extracted FLEURS language folder (`train.tsv`, `audio/train/`, ...)
+- `naijavoices:/data/naijavoices/hausa:ha`: an extracted NaijaVoices dataset folder or metadata CSV (`naijadata.vercel.app`)
 - `jsonl:/data/voxa/drive.jsonl`: Voxa's own format (below)
 
 Languages: `en` (Nigerian English), `pcm` (Pidgin), `ha`, `yo`, `ig`.

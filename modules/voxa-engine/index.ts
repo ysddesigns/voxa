@@ -121,6 +121,8 @@ export type ListenTuning = {
   words?: boolean;
   /** How strongly: bonus per matched word piece, 0.5 to 8. Builds from 26 Nov 2026. */
   wordsScore?: number;
+  /** Active listening model: "auto", "kroko", "omnilingual", or "voxa-ng". */
+  model?: string;
 };
 
 /** Custom words Live boosts (see ListenWords.kt). */
@@ -179,6 +181,12 @@ type VoxaEngineNative = {
   /** Loads the listening model ahead of startListening. Builds from 22 Nov 2026. */
   loadListen?(): Promise<{ loadMs: number }>;
   /**
+   * Startup warm-up, one model at a time on a low-priority thread: "listen" and/or "voice:<id>"
+   * ("voice:" = built-in). Skips a model the phone has no free memory for; idle models are freed
+   * again when Android runs low. busy: another warm-up was still running. Builds from 25 Nov 2026.
+   */
+  prewarm?(jobs: string[]): Promise<{ listen: boolean; voice: boolean; busy: boolean }>;
+  /**
    * The Listen notification (Android's Live Activity): timer, listening or paused, Pause/Resume,
    * Mark and Stop buttons (sent back as onListenAction), and an optional latest sentence that never
    * shows on the lock screen. Builds from 21 Nov 2026.
@@ -226,7 +234,7 @@ type VoxaEngineNative = {
   /** Builds from 22 Nov 2026 also report what Voxa stores (bytes per pack id, sessions, meeting audio). */
   storageInfo?(): { freeBytes: number; packBytes?: Record<string, number>; sessionBytes?: number; audioBytes?: number };
   /** Which engine models are ready (bundled in the app or downloaded as packs). Builds from 22 Nov 2026. */
-  modelStatus?(): { listen: boolean; speakers: boolean; bundledListen: boolean; bundledSpeakers: boolean };
+  modelStatus?(): { listen: boolean; speakers: boolean; bundledListen: boolean; bundledSpeakers: boolean; activeListenModel?: string; hasOmnilingual?: boolean };
   networkInfo?(): { connected: boolean; unmetered: boolean };
   /** unrestricted: Android's battery optimisation is off for Voxa. Builds from 23 Nov 2026. */
   batteryStatus?(): { unrestricted: boolean };

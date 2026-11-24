@@ -22,6 +22,10 @@ describe('cleanWords', () => {
     const many = Array.from({ length: MAX_WORDS + 20 }, (_, i) => `w${i}`);
     expect(cleanWords(many)).toHaveLength(MAX_WORDS);
   });
+
+  it('normalizes Hausa hooked letters and tone marks to plain Latin', () => {
+    expect(cleanWords(['ɗari', 'ƙarfe', 'ɓauna'])).toEqual(['dari', 'karfe', 'bauna']);
+  });
 });
 
 describe('addWords', () => {

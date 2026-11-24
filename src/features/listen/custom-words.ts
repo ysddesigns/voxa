@@ -6,6 +6,22 @@ import { VoxaEngine, type ListenWords } from '../../../modules/voxa-engine';
 export const MAX_WORDS = 300;
 export const MAX_LENGTH = 40;
 
+const HOOKED: Record<string, string> = {
+  'ɓ': 'b', 'Ɓ': 'B',
+  'ɗ': 'd', 'Ɗ': 'D',
+  'ƙ': 'k', 'Ƙ': 'K',
+  'ƴ': 'y', 'Ƴ': 'Y',
+};
+
+/** Folds Hausa hooked letters and tone marks so custom words match acoustic models and subword tokens. */
+export function normalizeWord(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[ɓƁɗƊƙƘƴƳ]/g, (ch) => HOOKED[ch] || ch)
+    .replace(/[’']/g, "'");
+}
+
 /**
  * Words typed in the add field: commas or new lines between them ("Lagos, Chinedu"), so a
  * list can be pasted. Spaces stay, since a name can be two words ("Port Harcourt").
@@ -18,7 +34,8 @@ export function splitWords(text: string): string[] {
 export function cleanWords(words: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const w of words) {
+  for (const raw of words) {
+    const w = normalizeWord(raw);
     const c = w.replace(/[/:\t\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_LENGTH).trim();
     if (!c || seen.has(c.toLowerCase())) continue;
     seen.add(c.toLowerCase());

@@ -22,7 +22,7 @@ class GatedRecognizer(
   private val rate: Int,
   private val pauseMs: Int = PAUSE_MS,
   private val hotwords: String = "",
-) {
+) : ListeningGate {
   class Result(val text: String, val final: Boolean, val startMs: Long, val endMs: Long)
 
   private var stream = recognizer.createStream(hotwords)
@@ -34,16 +34,16 @@ class GatedRecognizer(
   private var last = ""
 
   /** All audio given to [feed], in samples: the session's clock. */
-  var heardSamples = 0L
+  override var heardSamples = 0L
     private set
 
   /** Audio that actually went through the recognizer, and the time it took. */
-  var decodedSamples = 0L
+  override var decodedSamples = 0L
     private set
   var decodeNs = 0L
     private set
 
-  fun feed(samples: FloatArray, out: (Result) -> Unit) {
+  override fun feed(samples: FloatArray, out: (Result) -> Unit) {
     val chunkStart = heardSamples
     heardSamples += samples.size
     val voiced = if (vad == null) {
@@ -58,7 +58,7 @@ class GatedRecognizer(
       if (!voiced) {
         preRoll.addLast(samples)
         preRollSamples += samples.size
-        while (preRoll.size > 1 && preRollSamples - preRoll.first().size >= rate / 2) {
+        while (preRoll.size > 1 && preRollSamples - preRoll.first().size >= rate * 3 / 4) {
           preRollSamples -= preRoll.removeFirst().size
         }
         return
@@ -97,7 +97,7 @@ class GatedRecognizer(
   }
 
   /** Closes the last sentence when listening stops. The recognizer cannot be fed after this. */
-  fun finish(out: (Result) -> Unit) {
+  override fun finish(out: (Result) -> Unit) {
     // A short last word ("ten.") right before Stop may still be waiting for the VAD to confirm it.
     // Ask the VAD to decide on what it has; if it was speech, decode the held audio too.
     if (!speaking && vad != null && preRoll.isNotEmpty()) {
@@ -119,7 +119,7 @@ class GatedRecognizer(
     speaking = false
   }
 
-  fun release() {
+  override fun release() {
     stream.release()
   }
 
@@ -143,7 +143,7 @@ class GatedRecognizer(
   private fun ms(samples: Long) = samples * 1000 / rate
 
   companion object {
-    /** Silence that ends a sentence. */
-    const val PAUSE_MS = 800
+    /** Silence that ends a sentence (1.2s default allows natural pauses without premature splitting). */
+    const val PAUSE_MS = 1200
   }
 }

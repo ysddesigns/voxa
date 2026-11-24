@@ -62,7 +62,10 @@ export default function LibraryScreen() {
               icon={s.kind === 'scan' ? 'scan' : 'live'}
               title={s.title}
               subtitle={metaLine(s)}
-              onPress={() => router.push({ pathname: '/session/[id]', params: { id: s.id } })}
+              onPress={(e?: any) => {
+                console.log('DBGNAV lib-press', Date.now(), e?.nativeEvent?.timestamp, e?.nativeEvent?.pageY, e?.type);
+                router.push({ pathname: '/session/[id]', params: { id: s.id } });
+              }}
             />
           ))}
         </Group>

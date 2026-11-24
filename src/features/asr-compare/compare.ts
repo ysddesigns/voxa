@@ -5,6 +5,7 @@ import {
   LAB_ZIPFORMER_0626,
   LAB_ZIPFORMER_20M,
   LISTEN_PACK,
+  LISTEN_PACK_NG,
 } from '@/features/packs/catalogue';
 
 /**
@@ -74,6 +75,7 @@ export type Candidate = { id: string; name: string; note: string; modelType?: st
 /** The model in use first, then the candidates (catalogue lab packs). */
 export const CANDIDATES: Candidate[] = [
   { id: LISTEN_PACK, name: 'Kroko English (current)', note: 'Live, trained on varied speech, 71 MB, CC-BY-SA' },
+  { id: LISTEN_PACK_NG, name: 'Voxa Nigerian ASR (Zipformer)', note: 'Live, Nigerian English, Pidgin, Yoruba, Hausa, Igbo int8, ~71 MB' },
   { id: LAB_ZIPFORMER_20M, name: 'Zipformer 20M (previous)', note: 'Live, LibriSpeech only, 45 MB' },
   { id: LAB_ZIPFORMER_0626, name: 'Zipformer 2023-06-26', note: 'Live, LibriSpeech, larger model, 73 MB' },
   { id: LAB_NEMO_480, name: 'NeMo FastConformer', note: 'Live, NVIDIA, large training set, 137 MB, 0.48 s delay' },

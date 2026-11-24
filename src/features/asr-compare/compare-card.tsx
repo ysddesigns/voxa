@@ -295,7 +295,7 @@ export function AsrCompareCard({ disabled, autoTune }: { disabled?: boolean; aut
         style={[type.body, styles.passage, { color: colors.text, borderColor: colors.separator }]}
       />
       <Text style={[type.caption, { color: colors.textTertiary }]}>
-        Fix any word that is wrong for how you speak before scoring: results re-score as you edit. Only Moonshine is English only.
+        Fix any word that is wrong for how you speak before scoring: results re-score as you edit. Omnilingual supports Hausa, Yoruba, Igbo and Pidgin; the other candidates are English-trained.
       </Text>
       {recording && (
         <View style={[styles.meter, { backgroundColor: colors.waveUnplayed }]}>

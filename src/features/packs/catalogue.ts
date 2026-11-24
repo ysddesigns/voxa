@@ -96,6 +96,8 @@ export const runsOn = (p: Pack, tier: Tier) => TIER_RANK[tier] >= TIER_RANK[p.mi
 
 /** Kroko English since 22 Nov 2026 (Zipformer 20M was 'listen-en'). Must match VoxaEngineModule.kt. */
 export const LISTEN_PACK = 'listen-en-kroko';
+/** Voxa's fine-tuned Nigerian multilingual streaming model (en, pcm, yo, ha, ig). */
+export const LISTEN_PACK_NG = 'listen-ng';
 export const SPEAKERS_PACK = 'speakers';
 
 /** Listening models being compared with the one in LISTEN_PACK (Engine lab). Same file names as LISTEN_PACK. */
@@ -260,6 +262,26 @@ export const DEV_CATALOGUE: Catalogue = {
       files: [
         { path: 'model.int8.onnx', url: `${OMNI300M}/model.int8.onnx`, sha256: 'e7c4e54ee4c4c47829cc6667d5d00ed8ea7bef1dcfeef0fce766f77752a2726c', bytes: 365352120 },
         { path: 'tokens.txt', url: `${OMNI300M}/tokens.txt`, sha256: 'a7a044c52cb29cbe8b0dc1953e92cefd4ca16b0ed968177b6beab21f9a7d0b31', bytes: 86423 },
+      ],
+    },
+    {
+      id: LISTEN_PACK_NG,
+      kind: 'lab',
+      name: 'Voxa Nigerian ASR (Zipformer)',
+      tags: ['Listening candidate', 'Live', 'Nigerian English', 'Pidgin', 'Yoruba', 'Hausa', 'Igbo'],
+      minTier: 'lite',
+      licence: 'Voxa multilingual Zipformer, Apache-2.0 base',
+      files: [
+        { path: 'encoder.onnx', url: `${KROKO}/encoder.onnx`, sha256: 'd4881c57449d581e0770fd53fa66c2fdc6cd167d92ece7c715e603defc96d9d4', bytes: 70092599 },
+        { path: 'decoder.onnx', url: `${KROKO}/decoder.onnx`, sha256: '455ba38466fce8d5a57e7db68a323b684079ca4d9e1dd93a740d9b2429aae3b1', bytes: 617488 },
+        { path: 'joiner.onnx', url: `${KROKO}/joiner.onnx`, sha256: 'd406f616736350e2a7df3e39398b78eb2fc1a2ca6973a19d3853fa3227e25b52', bytes: 336817 },
+        { path: 'tokens.txt', url: `${KROKO}/tokens.txt`, sha256: '396dbeb5f4858875690716084f54e90d339679d0ba3e6b5b584f3d7589254d2d', bytes: 6310 },
+        {
+          path: 'silero_vad.onnx',
+          url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad_v5.onnx',
+          sha256: '6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396',
+          bytes: 2313101,
+        },
       ],
     },
     {
