@@ -11,13 +11,12 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { Icon } from '@/components/icons';
+import { RoundButton } from '@/components/scene/round-button';
 import { Button } from '@/components/ui';
-import { minTouch } from '@/design/tokens';
-import { fontFamily } from '@/design/type';
+import { useScene } from '@/design/scene';
+import { fontFamily, sceneType } from '@/design/type';
 import { posterMeta, posterTitle } from '@/features/library-rack/labels';
 import { itemKey, itemLabel, PosterFace, type RackItem } from './poster';
-import { useRack } from './room';
 
 const OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const GAP = 16;
@@ -56,7 +55,7 @@ export function StackViewer({
   onClosed: () => void;
   onOpen: (item: RackItem) => void;
 }) {
-  const r = useRack();
+  const { r } = useScene();
   const shown = useSharedValue(0);
   const x = useSharedValue(0);
   const [index, setIndex] = useState(0);
@@ -101,22 +100,14 @@ export function StackViewer({
       <Animated.View style={[styles.content, { paddingTop: topInset + 8, paddingBottom: bottomInset + 16 }, content]} pointerEvents="box-none">
         <View style={styles.head}>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.overline, { color: r.onScrimSecondary }]}>
+            <Text style={[sceneType.overline, { color: r.onScrimSecondary }]}>
               {items.length} SAVED{items.length > 1 ? ` · ${Math.min(index, items.length - 1) + 1} OF ${items.length}` : ''}
             </Text>
             <Text style={[styles.title, { color: r.onScrim }]} accessibilityRole="header" numberOfLines={1}>
               {title}
             </Text>
           </View>
-          <Pressable
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Put the stack back"
-            hitSlop={6}
-            style={({ pressed }) => [styles.round, { borderColor: r.onScrimSecondary, opacity: pressed ? 0.5 : 1 }]}
-          >
-            <Icon name="close" size={18} color={r.onScrim} />
-          </Pressable>
+          <RoundButton icon="close" size={18} label="Put the stack back" onPress={onClose} color={r.onScrim} borderColor={r.onScrimSecondary} />
         </View>
 
         <View style={{ flex: 1, justifyContent: 'center' }} pointerEvents="box-none">
@@ -145,10 +136,10 @@ export function StackViewer({
 
         {current ? (
           <View style={styles.foot}>
-            <Text style={[styles.itemTitle, { color: r.onScrim }]} numberOfLines={2}>
+            <Text style={[sceneType.heading, { color: r.onScrim }]} numberOfLines={2}>
               {current.kind === 'live' ? current.title || 'Listening' : posterTitle(current.meta)}
             </Text>
-            <Text style={[styles.meta, { color: r.onScrimSecondary }]} numberOfLines={1}>
+            <Text style={[sceneType.body, { color: r.onScrimSecondary }]} numberOfLines={1}>
               {current.kind === 'live' ? (current.paused ? 'Paused' : 'Recording now') : posterMeta(current.meta)}
             </Text>
             <Button
@@ -212,10 +203,6 @@ function Card({
 const styles = StyleSheet.create({
   content: { ...StyleSheet.absoluteFill, paddingHorizontal: 20 },
   head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  overline: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 1.6, lineHeight: 15, fontVariant: ['tabular-nums'] },
   title: { fontFamily: fontFamily.display, fontSize: 26, lineHeight: 34 },
-  round: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   foot: { gap: 2 },
-  itemTitle: { fontFamily: fontFamily.display, fontSize: 20, lineHeight: 26 },
-  meta: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 20 },
 });

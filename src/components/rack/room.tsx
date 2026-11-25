@@ -1,46 +1,13 @@
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
-import Svg, { Defs, Ellipse, G, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { useTheme } from '@/design/theme';
-import { rackDark, rackLight, type RackPalette } from '@/design/tokens';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Polygon, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { grow, SoftLight, type Point } from '@/components/scene/light';
+import { useScene } from '@/design/scene';
 import { seeded } from '@/features/library-rack/poster-art';
-
-/** The room's palette, and the side its light comes from: the window (left) by day, a lamp (right) at night. */
-export function useRoom(): { r: RackPalette; light: 'left' | 'right' } {
-  const dark = useTheme().scheme === 'dark';
-  return { r: dark ? rackDark : rackLight, light: dark ? 'right' : 'left' };
-}
-
-export const useRack = () => useRoom().r;
 
 /** How far the window light drifts per rack swiped: slower than the case, so it reads as a room. */
 const DRIFT = 0.12;
-
-/** A polygon grown about its centre: stacked at falling opacity, it gives light a soft edge without blur. */
-function grow(points: [number, number][], by: number): string {
-  const cx = points.reduce((n, p) => n + p[0], 0) / points.length;
-  const cy = points.reduce((n, p) => n + p[1], 0) / points.length;
-  return points
-    .map(([x, y]) => {
-      const dx = x - cx;
-      const dy = y - cy;
-      const d = Math.hypot(dx, dy) || 1;
-      return `${(x + (dx / d) * by).toFixed(1)},${(y + (dy / d) * by).toFixed(1)}`;
-    })
-    .join(' ');
-}
-
-/** Light with a soft edge: three copies, wider ones fainter. */
-function SoftLight({ points, color, strength }: { points: [number, number][]; color: string; strength: number }) {
-  return (
-    <G>
-      <Polygon points={grow(points, 9)} fill={color} opacity={strength * 0.22} />
-      <Polygon points={grow(points, 4)} fill={color} opacity={strength * 0.3} />
-      <Polygon points={grow(points, 0)} fill={color} opacity={strength * 0.48} />
-    </G>
-  );
-}
 
 /**
  * The room behind the bookcase, drawn once with no blur: a plaster wall lit from one side,
@@ -63,7 +30,7 @@ export const Room = memo(function Room({
   caseBox: { left: number; right: number; top: number; bottom: number } | null;
   simple?: boolean;
 }) {
-  const { r, light } = useRoom();
+  const { r, light } = useScene();
 
   // Floor boards converge on a point above the middle of the screen.
   const boards = useMemo(() => {
@@ -92,7 +59,7 @@ export const Room = memo(function Room({
   if (width <= 0 || height <= 0) return null;
 
   // Sun patch on the floor: the same window, stretched along the boards.
-  const floorPatch: [number, number][] = [
+  const floorPatch: Point[] = [
     [width * 0.02, floorY + (height - floorY) * 0.12],
     [width * 0.36, floorY + (height - floorY) * 0.1],
     [width * 0.62, height],
@@ -196,10 +163,10 @@ export const WindowLight = memo(function WindowLight({
   simple?: boolean;
   scrollX?: SharedValue<number>;
 }) {
-  const { r, light } = useRoom();
+  const { r, light } = useScene();
   const drift = useAnimatedStyle(() => ({ transform: [{ translateX: scrollX ? -scrollX.get() * DRIFT : 0 }] }));
   const panes = useMemo(() => {
-    const out: [number, number][][] = [];
+    const out: Point[][] = [];
     const skew = 0.5;
     const pw = width * 0.2;
     const ph = height * 0.2;
@@ -210,7 +177,7 @@ export const WindowLight = memo(function WindowLight({
       for (let col = 0; col < 2; col++) {
         const x = ox + col * (pw + gap);
         const y = oy + row * (ph + gap);
-        const at = (px: number, py: number): [number, number] => [px + (py - oy) * skew, py];
+        const at = (px: number, py: number): Point => [px + (py - oy) * skew, py];
         out.push([at(x, y), at(x + pw, y), at(x + pw, y + ph), at(x, y + ph)]);
       }
     }

@@ -1,8 +1,8 @@
 import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { useScene } from '@/design/scene';
 import { CASE, FLOOR_MIN } from './bookcase';
-import { useRoom } from './room';
 
 /**
  * Things standing on the floor at the bookcase's front corners, there whether the case is full
@@ -66,7 +66,7 @@ export const FloorDecor = memo(function FloorDecor({ bottom, rich }: { bottom: n
 });
 
 function FloorVase({ height, rich }: { height: number; rich: boolean }) {
-  const { r, light } = useRoom();
+  const { r, light } = useScene();
   const lit = light === 'left' ? 0 : 1;
   const away = light === 'left' ? 1 : -1;
   const width = Math.round(height * 0.66);
@@ -129,7 +129,7 @@ function FloorVase({ height, rich }: { height: number; rich: boolean }) {
 }
 
 function FloorLantern({ height, rich }: { height: number; rich: boolean }) {
-  const { r, light } = useRoom();
+  const { r, light } = useScene();
   const on = light === 'right'; // switched on at night: it is the evening light
   const lit = light === 'left' ? 0 : 1;
   const away = light === 'left' ? 1 : -1;

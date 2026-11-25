@@ -1,10 +1,10 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import { ContactShadow } from '@/components/scene/shadows';
+import { useScene } from '@/design/scene';
 import { SHELF_CHROME } from '@/features/library-rack/pockets';
 import { itemBand, itemLabel, PosterFace, type RackItem } from './poster';
-import { useRoom } from './room';
 
 const OUT = Easing.bezier(0.23, 1, 0.32, 1);
 /**
@@ -46,7 +46,7 @@ export const PocketView = memo(function PocketView({
   rich: boolean;
   onPress: (key: string) => void;
 }) {
-  const { r } = useRoom();
+  const { r } = useScene();
   const lift = useSharedValue(0);
   const front = useAnimatedStyle(() => ({
     transform: [{ translateY: -8 * lift.get() }, { rotate: `${-1 * lift.get()}deg` }],
@@ -79,7 +79,7 @@ export const PocketView = memo(function PocketView({
       importantForAccessibility={dimmed ? 'no-hide-descendants' : 'auto'}
       style={({ pressed }) => [{ width, height: total, opacity: dimmed ? 0.3 : !motion && pressed ? 0.75 : 1 }]}
     >
-      <ContactShadow width={width} bottom={0} color={r.ao} />
+      <ContactShadow width={width} />
 
       <Animated.View style={[StyleSheet.absoluteFill, fan]}>
         {EDGES.map((e, i) => {
@@ -118,27 +118,9 @@ export const PocketView = memo(function PocketView({
   );
 });
 
-/** The soft dark ellipse where a stack meets the shelf. */
-function ContactShadow({ width, bottom, color }: { width: number; bottom: number; color: string }) {
-  const w = width + 16;
-  return (
-    <View style={{ position: 'absolute', left: -8, bottom: bottom - 4, width: w, height: 10 }} pointerEvents="none">
-      <Svg width={w} height={10}>
-        <Defs>
-          <RadialGradient id="contact" cx="0.5" cy="0.5" rx="0.5" ry="0.5">
-            <Stop offset="0" stopColor={color} stopOpacity={1} />
-            <Stop offset="1" stopColor={color} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Ellipse cx={w / 2} cy={5} rx={w / 2} ry={5} fill="url(#contact)" />
-      </Svg>
-    </View>
-  );
-}
-
 /** A space on a shelf with nothing in it; a faint outline when the whole case is empty. */
 export function EmptyPocket({ width, height, outline }: { width: number; height: number; outline?: boolean }) {
-  const { r } = useRoom();
+  const { r } = useScene();
   return (
     <View style={{ width, height: height + SHELF_CHROME.peek }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {outline ? (

@@ -1,9 +1,10 @@
 import { memo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
+import { PaperTag } from '@/components/scene/paper';
+import { useScene } from '@/design/scene';
 import { fontFamily } from '@/design/type';
 import { SHELF_CHROME } from '@/features/library-rack/pockets';
-import { useRoom } from './room';
 
 /** Bookcase geometry, shared by the screen and the drawing. */
 export const CASE = {
@@ -37,15 +38,9 @@ export function eyeLevel(row: number, rows: number): EyeLevel {
   return row < mid ? 'above' : row > mid ? 'below' : 'level';
 }
 
-/** Light shading for a face: `towards` faces turn to the light. */
-function useShading() {
-  const { r, light } = useRoom();
-  return { r, light, lit: light === 'left' ? 0 : 1 };
-}
-
 /** The oak top and the white rail under it. Spans the screen; draws only over the case. */
 export const CaseTop = memo(function CaseTop({ screenW }: { screenW: number }) {
-  const { r, lit } = useShading();
+  const { r, lit } = useScene();
   const x0 = CASE.margin - CASE.overhang;
   const w = screenW - 2 * x0;
   const caseW = screenW - 2 * CASE.margin;
@@ -113,7 +108,7 @@ export function CaseShelf({
   rich: boolean;
   children: ReactNode;
 }) {
-  const { r } = useRoom();
+  const { r } = useScene();
   const interior = SHELF_CHROME.top + SHELF_CHROME.peek + posterH;
   const height = interior + SHELF_CHROME.edge;
   return (
@@ -124,11 +119,11 @@ export function CaseShelf({
         {tags.map((t, i) => (
           <View key={i} style={{ width: posterW, alignItems: 'center' }}>
             {t ? (
-              <View style={[styles.tag, { backgroundColor: r.tagBg, borderColor: r.tagBorder }]}>
+              <PaperTag>
                 <Text style={[styles.tagText, { color: r.tagText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={1.15}>
                   {t}
                 </Text>
-              </View>
+              </PaperTag>
             ) : null}
           </View>
         ))}
@@ -138,7 +133,7 @@ export function CaseShelf({
 }
 
 const ShelfDrawing = memo(function ShelfDrawing({ screenW, interior, eye, rich }: { screenW: number; interior: number; eye: EyeLevel; rich: boolean }) {
-  const { r, light, lit } = useShading();
+  const { r, light, lit } = useScene();
   const W = screenW - 2 * CASE.margin;
   const S = CASE.side;
   const F = CASE.face;
@@ -236,7 +231,7 @@ const ShelfDrawing = memo(function ShelfDrawing({ screenW, interior, eye, rich }
 
 /** The plinth: sides down to the floor, a kick board with an arched cut-out, the floor's shadow under it. */
 export const CaseBase = memo(function CaseBase({ screenW }: { screenW: number }) {
-  const { r, light, lit } = useShading();
+  const { r, light, lit } = useScene();
   const W = screenW - 2 * CASE.margin;
   const S = CASE.side;
   const H = CASE.base;
@@ -271,15 +266,15 @@ export const CaseBase = memo(function CaseBase({ screenW }: { screenW: number })
 
 /** The rack dots, on a little paper tag resting on the floor. */
 export function FloorDots({ count, current, dimmed, onPick }: { count: number; current: number; dimmed: (i: number) => boolean; onPick: (i: number) => void }) {
-  const { r } = useRoom();
+  const { r } = useScene();
   return (
-    <View style={[styles.dots, { backgroundColor: r.tagBg, borderColor: r.tagBorder }]}>
+    <PaperTag round>
       {Array.from({ length: count }, (_, i) => (
         <Pressable key={i} onPress={() => onPick(i)} hitSlop={{ top: 7, bottom: 7 }} style={styles.dotHit} accessibilityRole="button" accessibilityLabel={`Rack ${i + 1}`}>
           <View style={[styles.dot, { backgroundColor: i === current ? r.accent : r.tagText, opacity: i === current ? 1 : dimmed(i) ? 0.15 : 0.4 }]} />
         </Pressable>
       ))}
-    </View>
+    </PaperTag>
   );
 }
 
@@ -293,9 +288,7 @@ const styles = StyleSheet.create({
     gap: CASE.gap,
   },
   tags: { alignItems: 'center' },
-  tag: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 2, borderWidth: 1, maxWidth: '100%' },
   tagText: { fontFamily: fontFamily.bold, fontSize: 9, letterSpacing: 0.9, lineHeight: 12 },
-  dots: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderRadius: 999, borderWidth: 1 },
   dotHit: { width: 26, height: 30, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });

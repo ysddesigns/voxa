@@ -54,3 +54,17 @@ export const type: Record<Variant, TextStyle> = {
   overline: { fontFamily: fontFamily.regular, fontSize: 13, letterSpacing: 0, lineHeight: 18, textTransform: 'uppercase' },
   tab: { fontFamily: fontFamily.medium, fontSize: 10, letterSpacing: 0.1 },
 };
+
+/**
+ * Type for drawn scenes (the Rack and the rooms to come): a spaced small-caps overline over a
+ * serif title, as on a shop sign or a poster. Inter stays the body face.
+ */
+export const sceneType = {
+  /** "THE RACK · 12 SAVED". */
+  overline: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 1.6, lineHeight: 15, fontVariant: ['tabular-nums'] },
+  /** The screen's name, one per screen. */
+  title: { fontFamily: fontFamily.display, fontSize: 30, lineHeight: 38, letterSpacing: -0.5 },
+  /** Titles on notes and under a big poster. */
+  heading: { fontFamily: fontFamily.display, fontSize: 20, lineHeight: 26 },
+  body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 20 },
+} satisfies Record<string, TextStyle>;

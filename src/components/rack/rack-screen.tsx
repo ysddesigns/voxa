@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { BackHandler, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { BackHandler, Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,12 +9,14 @@ import { CASE, CaseBase, CaseShelf, CaseTop, eyeLevel, FLOOR_MIN, FloorDots } fr
 import { FloorDecor } from '@/components/rack/decor';
 import { EmptyPocket, PocketView } from '@/components/rack/pocket';
 import type { RackItem } from '@/components/rack/poster';
-import { Room, useRoom, WindowLight } from '@/components/rack/room';
+import { Room, WindowLight } from '@/components/rack/room';
 import { StackViewer } from '@/components/rack/stack-viewer';
+import { PaperNote, PaperText } from '@/components/scene/paper';
+import { RoundButton } from '@/components/scene/round-button';
 import { Button } from '@/components/ui';
-import { useDeviceTier } from '@/device/use-device-tier';
+import { useScene, useSceneQuality } from '@/design/scene';
 import { minTouch } from '@/design/tokens';
-import { fontFamily } from '@/design/type';
+import { fontFamily, sceneType } from '@/design/type';
 import { posterTitle } from '@/features/library-rack/labels';
 import { buildPockets, frontMatches, paginate, rackLayout, type Pocket, type RackLayout } from '@/features/library-rack/pockets';
 import { useListen } from '@/features/listen/listen-session';
@@ -47,16 +49,15 @@ const ANDROID_TAB_BAR = 64 + 8;
  * older cases. The tab bar floats over the floor, so the case stops above it.
  */
 export function RackScreen() {
-  const { r } = useRoom();
+  const { r } = useScene();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { fontScale } = useWindowDimensions();
   const l = useListen();
   const speaking = useSpeakSession().status !== 'idle';
-  const tier = useDeviceTier();
+  const { rich, motion } = useSceneQuality();
+  // Paging still follows Reduce Motion on its own; `motion` is also off on Lite phones.
   const reduceMotion = useReducedMotion();
-  const motion = tier !== 'lite' && !reduceMotion;
-  const rich = tier !== 'lite';
 
   const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -205,25 +206,23 @@ export function RackScreen() {
               </View>
             ) : (
               <>
-                <Text style={[styles.overline, { color: r.overline }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+                <Text style={[sceneType.overline, { color: r.overline }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
                   {savedCount ? `THE RACK · ${savedCount} SAVED` : 'THE RACK · ON THIS PHONE'}
                 </Text>
-                <Text style={[styles.title, { color: r.title }]} accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                <Text style={[sceneType.title, { color: r.title }]} accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.2}>
                   Library
                 </Text>
               </>
             )}
           </View>
 
-          <Pressable
+          <RoundButton
+            icon={searching ? 'close' : 'search'}
+            label={searching ? 'Close search' : 'Search the library'}
             onPress={toggleSearch}
-            accessibilityRole="button"
-            accessibilityLabel={searching ? 'Close search' : 'Search the library'}
-            hitSlop={6}
-            style={({ pressed }) => [styles.round, { borderColor: r.control, opacity: pressed ? 0.5 : 1 }]}
-          >
-            <Icon name={searching ? 'close' : 'search'} size={19} color={r.title} />
-          </Pressable>
+            color={r.title}
+            borderColor={r.control}
+          />
         </View>
 
         {layout ? (
@@ -273,13 +272,10 @@ export function RackScreen() {
 
             {empty ? (
               <View style={styles.noteWrap} pointerEvents="box-none">
-                <View style={[styles.note, { backgroundColor: r.tagBg, borderColor: r.tagBorder }]}>
-                  <Text style={[styles.noteTitle, { color: r.tagText }]}>Nothing on the shelves yet</Text>
-                  <Text style={[styles.noteBody, { color: r.tagText }]}>
-                    Meetings you listen to and text you scan are kept here as posters, on this phone only.
-                  </Text>
+                <PaperNote title="Nothing on the shelves yet">
+                  <PaperText>Meetings you listen to and text you scan are kept here as posters, on this phone only.</PaperText>
                   <Button label="Start Listening" icon="mic" accent onPress={() => router.navigate('/live')} style={{ alignSelf: 'flex-start', marginTop: 6 }} />
-                </View>
+                </PaperNote>
               </View>
             ) : null}
           </View>
@@ -419,16 +415,10 @@ function spokenLabel(p: ShownPocket, searching: boolean): string {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: CASE.margin, paddingBottom: 12 },
   middle: { flex: 1, minHeight: 56, justifyContent: 'center' },
-  round: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  overline: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 1.6, lineHeight: 15, fontVariant: ['tabular-nums'] },
-  title: { fontFamily: fontFamily.display, fontSize: 30, lineHeight: 38, letterSpacing: -0.5 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: minTouch, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1.5 },
   searchInput: { flex: 1, fontFamily: fontFamily.regular, fontSize: 16, paddingVertical: 0 },
   found: { fontFamily: fontFamily.medium, fontSize: 13, fontVariant: ['tabular-nums'] },
   noteWrap: { ...StyleSheet.absoluteFill, justifyContent: 'center', paddingHorizontal: CASE.margin + 24 },
-  note: { padding: 16, borderRadius: 3, borderWidth: 1, gap: 6, transform: [{ rotate: '-0.6deg' }] },
-  noteTitle: { fontFamily: fontFamily.display, fontSize: 20, lineHeight: 26 },
-  noteBody: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 20 },
   floor: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   /** The case's outline (oak top included), so light laid over it stays on it. */
   caseClip: { position: 'absolute', top: 0, bottom: 0, left: CASE.margin - CASE.overhang, right: CASE.margin - CASE.overhang, overflow: 'hidden' },
