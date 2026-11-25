@@ -17,7 +17,7 @@ check_torch_k2() {
 }
 check_torch_k2 || { echo "Install PyTorch and k2 first: python scripts/colab_install.py (or see the top of this file)."; exit 1; }
 
-pip install lhotse sentencepiece sherpa-onnx onnx onnxruntime soundfile tensorboard
+pip install lhotse lilcom sentencepiece sherpa-onnx onnx onnxruntime soundfile tensorboard
 
 if [ ! -d icefall ]; then
   git clone https://github.com/k2-fsa/icefall.git
@@ -27,6 +27,8 @@ git -C icefall checkout --quiet "$ICEFALL_COMMIT"
 pip install -r icefall/requirements.txt
 # If one of those packages pulled in a different torch, put a matching k2 back.
 check_torch_k2 || { python scripts/colab_install.py && check_torch_k2; }
+# lhotse stores features with lilcom, which it does not install itself.
+python -c "import lilcom" || { echo "lilcom did not install: pip install lilcom"; exit 1; }
 
 # The recipe: icefall's zipformer files, with our asr_datamodule.py in place of theirs.
 ASR=icefall/egs/librispeech/ASR
