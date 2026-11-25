@@ -1,4 +1,4 @@
-import { dark, light, rackDark, rackLight, type Palette } from '../tokens';
+import { dark, light, onAirSign, rackDark, rackLight, type Palette } from '../tokens';
 
 /**
  * PRD accessibility rule: AA contrast. Text needs 4.5:1 against every surface it sits on;
@@ -82,5 +82,14 @@ describe.each([
     ['the current-rack dot on its tag', r.accent, r.tagBg],
   ])('%s are at least 3:1', (_label, fg, bg) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('ON AIR sign', () => {
+  it('lit lettering is at least 4.5:1 on its glass', () => {
+    expect(contrast(onAirSign.inkOn, onAirSign.glassOn)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('the lit glass stands out from its housing at least 3:1', () => {
+    expect(contrast(onAirSign.glassOn, onAirSign.housing)).toBeGreaterThanOrEqual(3);
   });
 });

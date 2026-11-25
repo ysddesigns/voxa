@@ -209,6 +209,20 @@ export const rackDark: RackPalette = {
   onScrimSecondary: '#C9BFAC',
 };
 
+/**
+ * The Live tab's ON AIR sign: a lightbox on the studio wall. Fixed art colours (like the poster
+ * bands), the same by day and night: lit, its glass is the Voxa accent; off, a dark red glass.
+ */
+export const onAirSign = {
+  housing: '#2A2118',
+  housingEdge: '#4A3B2C',
+  glassOn: '#D63F1C',
+  inkOn: '#FFFFFF',
+  glassOff: '#4A2A22',
+  inkOff: '#A07A6C',
+  glow: '#FF7A4D',
+} as const;
+
 /** The shape scale. Old names (chip, hero, tile, icon) map onto it. */
 export const radius = {
   pill: 999,

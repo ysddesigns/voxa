@@ -15,12 +15,15 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
+import { OnAirSign } from '@/components/scene/on-air-sign';
+import { PaperShadow } from '@/components/scene/shadows';
 import { Screen } from '@/components/screen';
 import { Card, Group, ListRow } from '@/components/ui';
 import { announce, useScreenReader } from '@/design/a11y';
+import { useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius, squircle } from '@/design/tokens';
-import { type } from '@/design/type';
+import { sceneType, type } from '@/design/type';
 import { useEngines } from '@/engines/provider';
 import { useListen } from '@/features/listen/listen-session';
 import { useModels } from '@/features/packs/models';
@@ -46,11 +49,13 @@ export default function LiveScreen() {
 type ListenModel = 'kroko' | 'omnilingual';
 
 /**
- * Before listening: one big Start button, the language choice when there is one, and a single
- * line of reassurance. Everything else (marks, speaker labels) explains itself on the next screen.
+ * Before listening: the studio's ON AIR sign (off), one big Start button, the language choice
+ * when there is one, and a single line of reassurance. Everything else (marks, speaker labels)
+ * explains itself on the next screen.
  */
 function Ready() {
   const { colors } = useTheme();
+  const { rich } = useSceneQuality();
   const router = useRouter();
   const l = useListen();
   const models = useModels();
@@ -126,6 +131,11 @@ function Ready() {
               ]}
             />
           ) : null}
+
+          {/* Off until Voxa listens; it lights on the next screen. */}
+          <View style={styles.sign}>
+            <OnAirSign lit={false} rich={rich} />
+          </View>
 
           <Pressable
             accessibilityRole="button"
@@ -257,6 +267,7 @@ function Listening() {
   const [follow, setFollow] = useState(true);
   const screenReader = useScreenReader();
   const { prefs } = usePrefs();
+  const { rich, motion } = useSceneQuality();
 
   // Tell screen-reader users what changed: the controls' look alone does not.
   useEffect(() => {
@@ -332,52 +343,56 @@ function Listening() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top + 12 }]}>
+      {/* The studio: the ON AIR sign lights while the microphone is on. The words say the state too. */}
       <View style={styles.head}>
-        <View style={{ flex: 1 }}>
-          <Text style={[type.overline, { color: paused ? colors.textTertiary : colors.accentText }]}>
-            {l.status === 'starting' ? 'Starting…' : l.status === 'stopping' ? 'Saving…' : paused ? 'Paused' : 'Listening'}
-          </Text>
-          <Text style={[type.title, { color: colors.text }]} accessibilityRole="header" numberOfLines={2}>
-            {l.title}
-          </Text>
-        </View>
+        <OnAirSign lit={l.status === 'listening'} size="small" motion={motion} rich={rich} />
+        <Text style={[sceneType.overline, { color: paused ? colors.textTertiary : colors.accentText, flex: 1 }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          {l.status === 'starting' ? 'STARTING…' : l.status === 'stopping' ? 'SAVING…' : paused ? 'PAUSED' : 'LISTENING'}
+        </Text>
         <Clock />
       </View>
+      <Text style={[type.largeTitle, styles.title, { color: colors.text }]} accessibilityRole="header" numberOfLines={2}>
+        {l.title}
+      </Text>
 
       <Level paused={paused || busy} />
 
-      <View style={{ flex: 1 }}>
-        <FlatList
-          ref={list}
-          style={{ flex: 1 }}
-          accessibilityLabel="Captions"
-          contentContainerStyle={{ paddingHorizontal: 20, paddingVertical: 12, gap: 10 }}
-          data={data}
-          keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}
-          // Jump, not glide: words arrive several times a second, and an animated scroll each
-          // time keeps the list always mid-animation on a slow phone.
-          onContentSizeChange={() => following.current && list.current?.scrollToEnd({ animated: false })}
-          onScroll={onScroll}
-          scrollEventThrottle={100}
-          ListEmptyComponent={
-            <Text style={[type.body, { color: colors.textTertiary }]}>
-              {busy ? 'Getting the microphone ready…' : paused ? 'Paused. Nothing is being heard.' : 'Listening… words appear here as people speak.'}
-            </Text>
-          }
-          renderItem={renderItem}
-        />
-        {!follow && data.length > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Jump to latest"
-            accessibilityHint="Scrolls to the newest words and follows them again"
-            onPress={jumpToLatest}
-            style={({ pressed }) => [styles.jump, { backgroundColor: colors.primaryFill, opacity: pressed ? 0.8 : 1 }]}
-          >
-            <Icon name="chevronDown" size={18} color={colors.onPrimary} />
-            <Text style={[type.subheadline, { color: colors.onPrimary, fontFamily: type.headline.fontFamily }]}>Jump to latest</Text>
-          </Pressable>
-        ) : null}
+      {/* The captions on a plain sheet of paper: nothing drawn over the words. */}
+      <View style={styles.sheetWrap}>
+        <PaperShadow rich={rich} />
+        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+          <FlatList
+            ref={list}
+            style={{ flex: 1 }}
+            accessibilityLabel="Captions"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}
+            data={data}
+            keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}
+            // Jump, not glide: words arrive several times a second, and an animated scroll each
+            // time keeps the list always mid-animation on a slow phone.
+            onContentSizeChange={() => following.current && list.current?.scrollToEnd({ animated: false })}
+            onScroll={onScroll}
+            scrollEventThrottle={100}
+            ListEmptyComponent={
+              <Text style={[type.body, { color: colors.textTertiary }]}>
+                {busy ? 'Getting the microphone ready…' : paused ? 'Paused. Nothing is being heard.' : 'Listening… words appear here as people speak.'}
+              </Text>
+            }
+            renderItem={renderItem}
+          />
+          {!follow && data.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Jump to latest"
+              accessibilityHint="Scrolls to the newest words and follows them again"
+              onPress={jumpToLatest}
+              style={({ pressed }) => [styles.jump, { backgroundColor: colors.primaryFill, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Icon name="chevronDown" size={18} color={colors.onPrimary} />
+              <Text style={[type.subheadline, { color: colors.onPrimary, fontFamily: type.headline.fontFamily }]}>Jump to latest</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       {l.error ? <Text style={[type.caption, { color: colors.accentText, paddingHorizontal: 20 }]}>{l.error}</Text> : null}
@@ -475,7 +490,11 @@ function Control({ icon, label, onPress, primary, disabled }: { icon: IconName; 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  head: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 20 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
+  title: { paddingHorizontal: 20, marginTop: 10 },
+  sheetWrap: { flex: 1, marginHorizontal: 16, marginTop: 4 },
+  sheet: { flex: 1, borderRadius: 3, overflow: 'hidden' },
+  sign: { marginTop: 12, marginBottom: 4 },
   ready: { alignItems: 'center', gap: 20, paddingTop: 8, paddingBottom: 8 },
   start: { width: 120, height: 120, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   startText: { alignItems: 'center', gap: 4, marginTop: -6, paddingHorizontal: 24 },
