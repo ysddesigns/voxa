@@ -5,6 +5,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { Screen } from '@/components/screen';
 import { Group, ListRow, TextRow } from '@/components/ui';
 import { LiveBar, SpeakBar } from '@/components/live-bar';
+import { PosterThumb } from '@/components/rack/poster';
 import { Waveform } from '@/components/waveform';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius, squircle } from '@/design/tokens';
@@ -115,7 +116,7 @@ export default function Home() {
         {recent.map((item) => (
           <ListRow
             key={item.id}
-            icon={item.kind === 'scan' ? 'scan' : 'live'}
+            leading={<PosterThumb meta={item} width={30} />}
             title={item.title}
             subtitle={
               item.kind === 'scan'

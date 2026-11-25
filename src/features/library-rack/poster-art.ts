@@ -196,9 +196,9 @@ function landscape(meta: SessionMeta, rand: () => number): LandscapeScene {
   };
 }
 
-function page(meta: SessionMeta, rand: () => number): PageScene {
+function page(text: string, rand: () => number): PageScene {
   const p = pick(rand, PAPERS);
-  const words = (meta.text ?? '').trim().split(/\s+/).filter(Boolean).length;
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
   const count = clamp(Math.round(4 + words / 25), 4, 9);
   const lines = Array.from({ length: count }, (_, i) => (i === count - 1 ? 30 + rand() * 30 : 62 + rand() * 26)).map(r1);
   return { kind: 'page', paper: p.paper, ink: p.ink, corner: p.corner, lines, band: BANDS[pick(rand, [0, 3, 1])] };
@@ -206,5 +206,13 @@ function page(meta: SessionMeta, rand: () => number): PageScene {
 
 export function posterScene(meta: SessionMeta): PosterScene {
   const rand = seeded(hashId(meta.id));
-  return meta.kind === 'scan' ? page(meta, rand) : landscape(meta, rand);
+  return meta.kind === 'scan' ? page(meta.text ?? '', rand) : landscape(meta, rand);
+}
+
+/**
+ * A printed page for any text (a script being spoken): longer text, more lines. The same text
+ * always gets the same paper and band.
+ */
+export function textScene(text: string): PageScene {
+  return page(text, seeded(hashId(text.trim() || 'voxa')));
 }

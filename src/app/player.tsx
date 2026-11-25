@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
 import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
-import { Waveform } from '@/components/waveform';
+import { POSTER_RATIO, PosterSheet } from '@/components/rack/poster';
+import { PosterArt } from '@/components/rack/poster-art';
+import { useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { elevation, minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
+import { textScene } from '@/features/library-rack/poster-art';
 import { formatSpeed, formatTime } from '@/features/speak/playback';
 import { useSpeakSession } from '@/features/speak/speak-session';
 import { useVoices, voiceSubtitle } from '@/features/voices/voices-store';
@@ -28,6 +30,12 @@ export default function Player() {
   const [exportNote, setExportNote] = useState<string | null>(null);
   const cancelExport = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelExport.current?.(), []);
+  const { rich, motion } = useSceneQuality();
+  // The script's poster: a printed page from its text, the same paper every time it plays.
+  const scene = useMemo(() => textScene(s.text), [s.text]);
+  const [artH, setArtH] = useState(0);
+  const posterH = Math.max(0, artH - 20);
+  const posterW = Math.round(posterH / POSTER_RATIO);
 
   const shareAudio = async () => {
     if (s.status === 'playing') s.pause();
@@ -71,14 +79,27 @@ export default function Player() {
         <View style={styles.iconBtn} />
       </View>
 
-      <View style={[styles.art, { backgroundColor: colors.art }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Svg style={StyleSheet.absoluteFill} viewBox="0 0 342 300" preserveAspectRatio="none">
-          <Path d="M0 230 C 80 190, 160 270, 240 230 S 320 200, 342 210 V300 H0z" fill={colors.accent} />
-          <Path d="M38 44l14 8M36 68l14-4M56 38l2 12" stroke="#FFFFFF" strokeWidth={4} strokeLinecap="round" />
-        </Svg>
-        <View style={[styles.bubble, { backgroundColor: colors.warning }]}>
-          <Waveform bars={20} maxHeight={74} minHeight={10} barWidth={4} gap={4} color={colors.accent} breathe={playing} seed={1} />
-        </View>
+      {/* The script as a poster, like a record sleeve: its light breathes while it is spoken. */}
+      <View
+        style={styles.art}
+        onLayout={(e) => setArtH(Math.round(e.nativeEvent.layout.height))}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        {posterH > 0 ? (
+          <PosterSheet
+            band={scene.band}
+            overline={[playing ? 'SPEAKING' : s.status === 'paused' ? 'PAUSED' : 'READY', voice?.name.toUpperCase()].filter(Boolean).join(' · ')}
+            dot={playing ? 'breathing' : 'still'}
+            title={s.title}
+            art={<PosterArt scene={scene} id="player" />}
+            width={posterW}
+            height={posterH}
+            scale={posterW / 100}
+            motion={motion}
+            rich={rich}
+          />
+        ) : null}
       </View>
 
       <View style={styles.body}>
@@ -182,17 +203,7 @@ const styles = StyleSheet.create({
   grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: radius.pill },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginHorizontal: -12 },
   iconBtn: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
-  art: { marginTop: 8, flex: 1, maxHeight: 300, minHeight: 180, borderRadius: radius.card, ...squircle, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  bubble: {
-    width: 210,
-    height: 128,
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
-    borderBottomRightRadius: 34,
-    borderBottomLeftRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  art: { marginTop: 8, flex: 1, maxHeight: 300, minHeight: 180, alignItems: 'center', justifyContent: 'center' },
   body: { marginTop: 22, gap: 18 },
   times: { flexDirection: 'row', justifyContent: 'space-between' },
   tabular: { fontVariant: ['tabular-nums'] },

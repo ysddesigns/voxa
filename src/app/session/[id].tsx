@@ -4,7 +4,9 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
+import { POSTER_RATIO, PosterFace } from '@/components/rack/poster';
 import { progressProps } from '@/design/a11y';
+import { useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -40,6 +42,7 @@ export default function SessionScreen() {
   const l = useListen();
   const speak = useSpeakSession();
   const models = useModels();
+  const { rich } = useSceneQuality();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [title, setTitle] = useState('');
 
@@ -126,23 +129,31 @@ export default function SessionScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32, gap: 16 }}>
-        <View style={{ gap: 4 }}>
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            onBlur={saveTitle}
-            onSubmitEditing={saveTitle}
-            returnKeyType="done"
-            accessibilityLabel="Session title"
-            style={[type.title, { color: colors.text, padding: 0 }]}
-          />
-          <Text style={[type.callout, { color: colors.textTertiary }]}>
-            {session.kind === 'scan'
-              ? `Scanned · ${formatDay(session.startedAt)} · ${wordCount(session.text ?? '')} words`
-              : `${formatDay(session.startedAt)} · ${formatDuration(session.durationMs)}`}
-            {session.speakers ? ` · ${session.speakers} ${session.speakers === 1 ? 'speaker' : 'speakers'}` : ''}
-            {session.status === 'recovered' ? ' · recovered' : ''}
-          </Text>
+        {/* The session's poster, as on its shelf in the Library, beside its name. */}
+        <View style={styles.head}>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <PosterFace item={{ kind: 'session', meta: session }} width={POSTER_W} height={Math.round(POSTER_W * POSTER_RATIO)} motion={false} rich={rich} />
+          </View>
+          <View style={{ flex: 1, gap: 4 }}>
+            <TextInput
+              value={title}
+              onChangeText={setTitle}
+              onBlur={saveTitle}
+              onSubmitEditing={saveTitle}
+              multiline
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
+              accessibilityLabel="Session title"
+              style={[type.largeTitle, { color: colors.text, padding: 0 }]}
+            />
+            <Text style={[type.callout, { color: colors.textTertiary }]}>
+              {session.kind === 'scan'
+                ? `Scanned · ${formatDay(session.startedAt)} · ${wordCount(session.text ?? '')} words`
+                : `${formatDay(session.startedAt)} · ${formatDuration(session.durationMs)}`}
+              {session.speakers ? ` · ${session.speakers} ${session.speakers === 1 ? 'speaker' : 'speakers'}` : ''}
+              {session.status === 'recovered' ? ' · recovered' : ''}
+            </Text>
+          </View>
         </View>
 
         {session.kind === 'scan' ? (
@@ -326,7 +337,11 @@ function IconButton({ icon, label, onPress }: { icon: IconName; label: string; o
   );
 }
 
+/** Width of the poster at the top of the screen. */
+const POSTER_W = 88;
+
 const styles = StyleSheet.create({
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   iconBtn: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, alignItems: 'center', justifyContent: 'center' },

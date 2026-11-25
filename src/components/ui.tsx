@@ -116,6 +116,7 @@ export function Group({
 /** A list item that opens something: icon tile, title, a line of detail, chevron. */
 export function ListRow({
   icon,
+  leading,
   title,
   subtitle,
   tint,
@@ -123,6 +124,8 @@ export function ListRow({
   accessibilityLabel,
 }: {
   icon?: IconName;
+  /** Drawn in place of the icon tile, such as a session's poster. */
+  leading?: ReactNode;
   title: string;
   subtitle?: string;
   /** Icon tile in the accent tint (live and attention items). */
@@ -138,11 +141,11 @@ export function ListRow({
       accessibilityLabel={accessibilityLabel ?? (subtitle ? `${title}, ${subtitle}` : title)}
       style={({ pressed }) => [styles.row, { paddingVertical: 10 }, pressed && { backgroundColor: colors.chipPressed }]}
     >
-      {icon ? (
+      {leading ?? (icon ? (
         <View style={[styles.rowIcon, { backgroundColor: tint ? colors.warning : colors.chip }]}>
           <Icon name={icon} size={18} color={tint ? colors.accentText : colors.text} />
         </View>
-      ) : null}
+      ) : null)}
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[type.body, { color: colors.text }]} numberOfLines={2}>
           {title}
