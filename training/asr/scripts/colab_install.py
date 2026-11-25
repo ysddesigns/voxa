@@ -57,11 +57,28 @@ def driver_cuda() -> tuple[int, ...]:
     return _ver(m.group(1)) if m else ()
 
 
+CHECK = """
+import torch, k2
+assert torch.cuda.is_available(), "torch cannot see the GPU"
+k2v = getattr(k2, "__dev_version__", "") or getattr(k2, "__version__", "")
+print("OK: torch", torch.__version__, "| k2", k2v, "| GPU", torch.cuda.get_device_name(0))
+"""
+
+
 def works() -> bool:
-    p = subprocess.run(
-        [sys.executable, "-c", "import torch, k2; assert torch.cuda.is_available(), 'no GPU'; print('torch', torch.__version__, 'k2', k2.__version__, 'GPU', torch.cuda.get_device_name(0))"],
-    )
-    return p.returncode == 0
+    return subprocess.run([sys.executable, "-c", CHECK]).returncode == 0
+
+
+def install_k2(w: dict) -> bool:
+    """This k2 build only. --no-deps so it never swaps torch; --force-reinstall replaces a k2 built for another CUDA."""
+    return pip("--no-deps", "--force-reinstall", w["url"])
+
+
+def install_torch(version: str, cuda: str) -> bool:
+    """Exactly torch <version>+cu<cuda>. The +cuXYZ pin matters: plain torch==2.9.0 is already met by
+    2.9.0+cu130, so pip would keep the wrong CUDA build."""
+    cu = "cu" + cuda.replace(".", "")
+    return pip(f"torch=={version}+{cu}", "--index-url", f"https://download.pytorch.org/whl/{cu}")
 
 
 def main() -> None:
@@ -73,29 +90,34 @@ def main() -> None:
     wheels = k2_wheels(html, py)
     if not wheels:
         sys.exit(f"No k2 CUDA wheels for Python {py} at {INDEX}")
+    pip("graphviz")  # k2's one other dependency, since k2 itself goes in with --no-deps
 
     have = installed_torch()
+    have_cuda = have[1] if have else ""
     if have:
-        print(f"Installed: torch {have[0]}, CUDA {have[1] or 'none'}; Python {py}")
-        w = k2_for(wheels, *have) if have[1] else None
-        if w and pip(w["url"]) and works():
+        print(f"Installed: torch {have[0]}, CUDA {have_cuda or 'none'}; Python {py}")
+        w = k2_for(wheels, *have) if have_cuda else None
+        if w and install_k2(w) and works():
             return
-        print("No k2 build for this torch; installing a torch that has one.")
+        print("No working k2 build for this torch; installing a torch that has one.")
 
     limit = driver_cuda()
+    # Same CUDA as the installed torch first: its CUDA libraries are already on the disk.
+    candidates = sorted(wheels, key=lambda w: w["cuda"] != have_cuda)
     tried = set()
-    for w in wheels:
+    for w in candidates:
         key = (w["torch"], w["cuda"])
         if key in tried or (limit and _ver(w["cuda"]) > limit):
             continue
         tried.add(key)
         if len(tried) > 4:
             break
-        cu = "cu" + w["cuda"].replace(".", "")
-        if not pip(f"torch=={w['torch']}", "--index-url", f"https://download.pytorch.org/whl/{cu}"):
+        print(f"Trying torch {w['torch']} with CUDA {w['cuda']}", flush=True)
+        if not install_torch(w["torch"], w["cuda"]):
             continue
+        # They were built for the old torch. Training does not use them; fastai/timm warnings are harmless.
         subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "-q", "torchvision", "torchaudio"])
-        if pip(w["url"]) and works():
+        if install_k2(w) and works():
             return
     sys.exit("Could not find a torch and k2 that work together here. See https://k2-fsa.github.io/k2/installation/")
 
