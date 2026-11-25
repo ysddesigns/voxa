@@ -17,7 +17,7 @@ import { minTouch } from '@/design/tokens';
 import { fontFamily } from '@/design/type';
 import { posterMeta, posterTitle } from '@/features/library-rack/labels';
 import { itemKey, itemLabel, PosterFace, type RackItem } from './poster';
-import { useRack } from './rack-wall';
+import { useRack } from './room';
 
 const OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const GAP = 16;
@@ -35,6 +35,7 @@ export function StackViewer({
   topInset,
   bottomInset,
   motion,
+  rich,
   closing,
   onClose,
   onClosed,
@@ -48,6 +49,8 @@ export function StackViewer({
   bottomInset: number;
   /** Lift-and-spread entrance; without it (Lite, reduced motion) a plain fade. */
   motion: boolean;
+  /** Soft shadows and gloss on the posters (off on Lite phones). */
+  rich: boolean;
   closing: boolean;
   onClose: () => void;
   onClosed: () => void;
@@ -135,7 +138,7 @@ export function StackViewer({
             windowSize={5}
             style={{ flexGrow: 0, height: cardH + 24, marginHorizontal: -20 }}
             renderItem={({ item, index: i }) => (
-              <Card item={item} i={i} x={x} interval={interval} width={cardW} height={cardH} motion={motion} onOpen={onOpen} />
+              <Card item={item} i={i} x={x} interval={interval} width={cardW} height={cardH} motion={motion} rich={rich} onOpen={onOpen} />
             )}
           />
         </View>
@@ -170,6 +173,7 @@ function Card({
   width,
   height,
   motion,
+  rich,
   onOpen,
 }: {
   item: RackItem;
@@ -179,6 +183,7 @@ function Card({
   width: number;
   height: number;
   motion: boolean;
+  rich: boolean;
   onOpen: (item: RackItem) => void;
 }) {
   const press = useSharedValue(0);
@@ -198,7 +203,7 @@ function Card({
       style={{ width: interval, alignItems: 'center', paddingVertical: 12 }}
     >
       <Animated.View style={style}>
-        <PosterFace item={item} width={width} height={height} scale={width / 100} motion={motion} />
+        <PosterFace item={item} width={width} height={height} scale={width / 100} motion={motion} rich={rich} />
       </Animated.View>
     </Pressable>
   );

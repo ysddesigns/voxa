@@ -1,22 +1,36 @@
-import { bucketLabel } from './shelves';
+import { bucketLabel, startOfWeek } from './shelves';
 
 /**
  * The fixed Rack: it always fits the screen, so it grows deeper instead of longer. Each pocket
- * is one time bucket (This Week, Last Week, then a month) holding a stack, newest in front.
+ * is one time bucket holding a stack, newest in front: Today, Yesterday, each earlier day of
+ * this week, Last Week, then a month. Days keep a busy week from filling only one pocket.
  * A rack holds rows x cols pockets; more pockets go on the next rack (swipe across).
  */
 
 export type Pocket<T> = {
   key: string;
-  /** Short enough for the lip under one pocket: "THIS WEEK", "OCTOBER", "OCT 2025". */
+  /** Short enough for the tag under one pocket: "TODAY", "MONDAY", "OCTOBER", "OCT 2025". */
   label: string;
-  /** Spoken: "This week", "October 2025". */
+  /** Spoken: "Today", "Monday", "October 2025". */
   spoken: string;
   /** Newest first. */
   items: T[];
 };
 
+const DAY = 86_400_000;
+const startOfDay = (at: number) => {
+  const d = new Date(at);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+};
+
 export function pocketLabel(at: number, now = Date.now()): { label: string; spoken: string } {
+  const today = startOfDay(now);
+  if (at >= today) return { label: 'TODAY', spoken: 'Today' }; // includes a clock that runs ahead
+  if (at >= today - DAY) return { label: 'YESTERDAY', spoken: 'Yesterday' };
+  if (at >= startOfWeek(now)) {
+    const day = new Date(at).toLocaleDateString('en-GB', { weekday: 'long' });
+    return { label: day.toUpperCase(), spoken: day };
+  }
   const full = bucketLabel(at, now);
   const spoken = full.charAt(0) + full.slice(1).toLowerCase();
   const m = /^([A-Z]+) (\d{4})$/.exec(full);
@@ -52,9 +66,12 @@ export function frontMatches<T>(items: T[], match: (item: T) => boolean): { item
   return { items: [...yes, ...no], hits: yes.length };
 }
 
-/** Space each shelf needs besides the poster: room for the stack's peeking edges, the lip, the gap under it. */
-export const SHELF_CHROME = { peek: 16, lip: 22, below: 10 } as const;
-const CHROME = SHELF_CHROME.peek + SHELF_CHROME.lip + SHELF_CHROME.below;
+/**
+ * Space each shelf needs besides the poster: headroom under the shelf above, room for the
+ * stack's peeking edges, and the shelf board's front edge (which carries the tags).
+ */
+export const SHELF_CHROME = { top: 8, peek: 16, edge: 18 } as const;
+const CHROME = SHELF_CHROME.top + SHELF_CHROME.peek + SHELF_CHROME.edge;
 const RATIO = 1.42;
 const MIN_POSTER_H = 84;
 

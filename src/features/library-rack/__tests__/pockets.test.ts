@@ -5,19 +5,40 @@ const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h)
 const NOW = at(2026, 11, 25, 15);
 
 describe('pockets', () => {
-  it('uses short lip labels and spoken names', () => {
-    expect(pocketLabel(at(2026, 11, 24), NOW)).toEqual({ label: 'THIS WEEK', spoken: 'This week' });
+  it('names today, yesterday, then the days of this week', () => {
+    expect(pocketLabel(at(2026, 11, 25, 9), NOW)).toEqual({ label: 'TODAY', spoken: 'Today' });
+    expect(pocketLabel(NOW + 3_600_000 * 30, NOW)).toEqual({ label: 'TODAY', spoken: 'Today' });
+    expect(pocketLabel(at(2026, 11, 24, 23), NOW)).toEqual({ label: 'YESTERDAY', spoken: 'Yesterday' });
+    expect(pocketLabel(at(2026, 11, 23, 8), NOW)).toEqual({ label: 'MONDAY', spoken: 'Monday' });
+    // Monday's yesterday is Sunday, last week: "Yesterday" wins.
+    const monday = at(2026, 11, 23, 15);
+    expect(pocketLabel(at(2026, 11, 22, 10), monday).label).toBe('YESTERDAY');
+    expect(pocketLabel(at(2026, 11, 21, 10), monday).label).toBe('LAST WEEK');
+  });
+
+  it('uses short tag labels and spoken names for older buckets', () => {
+    expect(pocketLabel(at(2026, 11, 17), NOW)).toEqual({ label: 'LAST WEEK', spoken: 'Last week' });
     expect(pocketLabel(at(2026, 10, 3), NOW)).toEqual({ label: 'OCTOBER', spoken: 'October' });
     expect(pocketLabel(at(2025, 10, 3), NOW)).toEqual({ label: 'OCT 2025', spoken: 'October 2025' });
   });
 
   it('stacks each time bucket in one pocket, newest in front', () => {
-    const items = [25, 24, 18, 17, 3].map((d, i) => ({ i, at: at(2026, 11, d) }));
+    const items = [25, 25, 24, 18, 17, 3].map((d, i) => ({ i, at: at(2026, 11, d, 10 - i) }));
     const pockets = buildPockets(items, (x) => x.at, NOW);
     expect(pockets.map((p) => [p.label, p.items.map((x) => x.i)])).toEqual([
-      ['THIS WEEK', [0, 1]],
-      ['LAST WEEK', [2, 3]],
-      ['NOVEMBER', [4]],
+      ['TODAY', [0, 1]],
+      ['YESTERDAY', [2]],
+      ['LAST WEEK', [3, 4]],
+      ['NOVEMBER', [5]],
+    ]);
+  });
+
+  it('groups older items by week, then month', () => {
+    const items = [18, 17, 3].map((d, i) => ({ i, at: at(2026, 11, d) }));
+    const pockets = buildPockets(items, (x) => x.at, NOW);
+    expect(pockets.map((p) => [p.label, p.items.map((x) => x.i)])).toEqual([
+      ['LAST WEEK', [0, 1]],
+      ['NOVEMBER', [2]],
     ]);
   });
 
@@ -34,7 +55,7 @@ describe('pockets', () => {
 });
 
 describe('rack layout', () => {
-  const chrome = SHELF_CHROME.peek + SHELF_CHROME.lip + SHELF_CHROME.below;
+  const chrome = SHELF_CHROME.top + SHELF_CHROME.peek + SHELF_CHROME.edge;
 
   it.each([
     ['small Android (360 x 740)', 308, 540],

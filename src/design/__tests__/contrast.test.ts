@@ -57,20 +57,24 @@ describe.each([
   ['dark', rackDark],
 ])('%s rack', (_name, r) => {
   it.each([
-    ['title', r.title, r.wall],
-    ['overline', r.overline, r.wall],
-    ['lip label', r.onLip, r.lip],
-  ])('%s text is at least 4.5:1', (_label, fg, bg) => {
+    ['title on the wall', r.title, r.wall],
+    ['overline on the wall', r.overline, r.wall],
+    ['overline on the shaded wall', r.overline, r.wallShade],
+    ['shelf tags and the empty-case note', r.tagText, r.tagBg],
+  ])('%s is at least 4.5:1', (_label, fg, bg) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });
-  // The scrim is see-through: test text on it laid over the wall's lightest light.
+  // The scrim is see-through: test text on it laid over the room's lightest light.
   it.each([
     ['onScrim', r.onScrim],
     ['onScrimSecondary', r.onScrimSecondary],
   ])('%s text is at least 4.5:1 on the scrim over the wall', (_label, fg) => {
-    expect(contrast(fg, over(r.scrim, r.wallLight))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(fg, over(r.scrim, r.light))).toBeGreaterThanOrEqual(4.5);
   });
-  it('wire marks are at least 3:1 on the wall', () => {
-    expect(contrast(r.wire, r.wall)).toBeGreaterThanOrEqual(3);
+  it.each([
+    ['button borders on the wall', r.control, r.wall],
+    ['the current-rack dot on its tag', r.accent, r.tagBg],
+  ])('%s are at least 3:1', (_label, fg, bg) => {
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
   });
 });

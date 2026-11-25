@@ -4,10 +4,10 @@ import { useFocusEffect, usePreventRemove, useRouter } from 'expo-router';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
+import { CASE, CaseBase, CaseShelf, CaseTop, eyeLevel, FLOOR_MIN, FloorDots } from '@/components/rack/bookcase';
 import { EmptyPocket, PocketView } from '@/components/rack/pocket';
 import type { RackItem } from '@/components/rack/poster';
-import { RackWall, useRack } from '@/components/rack/rack-wall';
-import { COUNTER_MIN, Counter, PocketShelf, RACK, RackFeet, RackTop } from '@/components/rack/shelf';
+import { Room, useRoom, WindowLight } from '@/components/rack/room';
 import { StackViewer } from '@/components/rack/stack-viewer';
 import { Button } from '@/components/ui';
 import { useDeviceTier } from '@/device/use-device-tier';
@@ -22,20 +22,23 @@ import type { SessionMeta } from '@/storage/sessions';
 /** A pocket as shown: its stack ordered for the search, and how many matched. */
 type ShownPocket = Pocket<RackItem> & { hits: number };
 
-/** The live poster always lands on This Week, in front. */
+/** The live poster always lands on Today, in front. */
 const itemTime = (i: RackItem) => (i.kind === 'live' ? Infinity : i.meta.startedAt);
 
 const matchSession = (m: SessionMeta, q: string) =>
   m.title.toLowerCase().includes(q) || posterTitle(m).toLowerCase().includes(q) || (m.text ?? '').toLowerCase().includes(q);
 
+/** The wall meets the floor this far above the case's bottom, so the case stands on the floor. */
+const FLOOR_OVERLAP = 12;
+
 /**
- * Library v2, "The Rack". The rack always fits the screen and grows deeper, not longer: each
- * pocket is one week or month, a stack with the newest poster in front and older ones peeking
- * out behind. Tap a pocket to pull its stack out; swipe across for older racks. Same data and
- * actions as the Library tab.
+ * Library v2, "The Rack": a white bookcase with an oak top in a sunlit room (lamplit at night),
+ * drawn in code. It always fits the screen and grows deeper, not longer: each stack is one day,
+ * week or month, newest poster in front, older ones showing behind. Tap a stack to pull it off
+ * the shelf; swipe across for older cases. Same data and actions as the Library tab.
  */
 export default function LibraryRackScreen() {
-  const r = useRack();
+  const { r } = useRoom();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { fontScale } = useWindowDimensions();
@@ -43,13 +46,14 @@ export default function LibraryRackScreen() {
   const tier = useDeviceTier();
   const reduceMotion = useReducedMotion();
   const motion = tier !== 'lite' && !reduceMotion;
+  const rich = tier !== 'lite';
 
   const [sessions, setSessions] = useState<SessionMeta[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [viewer, setViewer] = useState<{ key: string; closing: boolean } | null>(null);
   const [page, setPage] = useState(0);
-  // The whole screen, kept at its tallest so the keyboard never shrinks the rack.
+  // The whole screen, kept at its tallest so the keyboard never shrinks the case.
   const [root, setRoot] = useState({ w: 0, h: 0 });
   const [headerH, setHeaderH] = useState(0);
 
@@ -85,10 +89,19 @@ export default function LibraryRackScreen() {
   }, [sessions, l.sessionId, l.status, l.title, q]);
 
   const layout = useMemo(() => {
-    const area = root.h - headerH - RACK.top - RACK.base - (COUNTER_MIN + insets.bottom);
+    const area = root.h - headerH - CASE.top - CASE.base - (FLOOR_MIN + insets.bottom);
     if (root.w <= 0 || headerH <= 0 || area <= 0) return null;
-    return rackLayout({ width: root.w - 2 * RACK.margin - 2 * RACK.inset, height: area, fontScale, gap: RACK.gap });
+    const inner = root.w - 2 * (CASE.margin + CASE.side + CASE.inset);
+    return rackLayout({ width: inner, height: area, fontScale, gap: CASE.gap });
   }, [root, headerH, insets.bottom, fontScale]);
+
+  const caseH = layout ? CASE.top + layout.rows * layout.shelfH + CASE.base : 0;
+  const caseBottom = headerH + caseH;
+  const floorY = layout ? caseBottom - FLOOR_OVERLAP : root.h * 0.8;
+  const caseBox = useMemo(
+    () => (layout ? { left: CASE.margin, right: root.w - CASE.margin, top: headerH, bottom: caseBottom } : null),
+    [layout, root.w, headerH, caseBottom],
+  );
 
   const racks = useMemo(() => paginate(pockets, layout ? layout.cols * layout.rows : 9), [pockets, layout]);
   const current = Math.min(page, racks.length - 1);
@@ -139,7 +152,8 @@ export default function LibraryRackScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: r.wall }} onLayout={onRoot}>
-      <RackWall width={root.w} height={root.h} simple={tier === 'lite'} scrollX={motion ? scrollX : undefined} />
+      <Room width={root.w} height={root.h} floorY={floorY} caseBox={caseBox} simple={!rich} />
+      <WindowLight width={root.w} height={floorY} strength={0.9} simple={!rich} scrollX={motion ? scrollX : undefined} />
 
       <View style={{ flex: 1 }} importantForAccessibility={shownPocket ? 'no-hide-descendants' : 'auto'}>
         <View style={[styles.header, { paddingTop: insets.top + 8 }]} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
@@ -148,14 +162,14 @@ export default function LibraryRackScreen() {
             accessibilityRole="button"
             accessibilityLabel="Back to Library"
             hitSlop={6}
-            style={({ pressed }) => [styles.round, { borderColor: r.wire, opacity: pressed ? 0.5 : 1 }]}
+            style={({ pressed }) => [styles.round, { borderColor: r.control, opacity: pressed ? 0.5 : 1 }]}
           >
             <Icon name="chevronLeft" size={22} color={r.title} strokeWidth={2.2} />
           </Pressable>
 
           <View style={styles.middle}>
             {searching ? (
-              <View style={[styles.search, { borderColor: r.wire }]}>
+              <View style={[styles.search, { borderColor: r.control }]}>
                 <Icon name="search" size={17} color={r.overline} />
                 <TextInput
                   value={query}
@@ -190,14 +204,14 @@ export default function LibraryRackScreen() {
             accessibilityRole="button"
             accessibilityLabel={searching ? 'Close search' : 'Search the rack'}
             hitSlop={6}
-            style={({ pressed }) => [styles.round, { borderColor: r.wire, opacity: pressed ? 0.5 : 1 }]}
+            style={({ pressed }) => [styles.round, { borderColor: r.control, opacity: pressed ? 0.5 : 1 }]}
           >
             <Icon name={searching ? 'close' : 'search'} size={19} color={r.title} />
           </Pressable>
         </View>
 
         {layout ? (
-          <View style={{ height: layout.rows * layout.shelfH + RACK.top + RACK.base }}>
+          <View style={{ height: caseH }}>
             <Animated.ScrollView
               ref={pager}
               horizontal
@@ -209,11 +223,11 @@ export default function LibraryRackScreen() {
               keyboardShouldPersistTaps="handled"
             >
               {racks.map((rack, i) => (
-                <RackPage
+                <CasePage
                   key={i}
                   index={i}
                   width={root.w}
-                  // Only the racks either side of this one are drawn.
+                  // Only the cases either side of this one are drawn.
                   drawn={Math.abs(i - current) <= 1}
                   rack={rack}
                   layout={layout}
@@ -221,17 +235,31 @@ export default function LibraryRackScreen() {
                   empty={empty}
                   searching={!!q}
                   motion={motion}
+                  rich={rich}
                   scrollX={scrollX}
                   onPocket={openPocket}
                 />
               ))}
             </Animated.ScrollView>
 
+            {/* The same window light, faintly, falling across the case and its posters. */}
+            <View style={styles.caseClip} pointerEvents="none">
+              <WindowLight
+                width={root.w}
+                height={floorY}
+                left={-(CASE.margin - CASE.overhang)}
+                top={-headerH}
+                strength={0.3}
+                simple={!rich}
+                scrollX={motion ? scrollX : undefined}
+              />
+            </View>
+
             {empty ? (
               <View style={styles.noteWrap} pointerEvents="box-none">
-                <View style={[styles.note, { backgroundColor: r.wallLight, borderColor: r.wire }]}>
-                  <Text style={[styles.noteTitle, { color: r.title }]}>Nothing on the rack yet</Text>
-                  <Text style={[styles.noteBody, { color: r.title }]}>
+                <View style={[styles.note, { backgroundColor: r.tagBg, borderColor: r.tagBorder }]}>
+                  <Text style={[styles.noteTitle, { color: r.tagText }]}>Nothing on the shelves yet</Text>
+                  <Text style={[styles.noteBody, { color: r.tagText }]}>
                     Meetings you listen to and text you scan are kept here as posters, on this phone only.
                   </Text>
                   <Button label="Start Listening" icon="mic" accent onPress={() => router.navigate('/live')} style={{ alignSelf: 'flex-start', marginTop: 6 }} />
@@ -241,28 +269,20 @@ export default function LibraryRackScreen() {
           </View>
         ) : null}
 
-        <Counter bottomInset={insets.bottom}>
+        <View style={[styles.floor, { paddingBottom: insets.bottom, minHeight: FLOOR_MIN + insets.bottom }]}>
           {racks.length > 1 ? (
             <View
-              style={styles.dots}
               accessible
               accessibilityRole="adjustable"
-              accessibilityLabel="Rack"
+              accessibilityLabel="Bookcase"
               accessibilityValue={{ text: `${current + 1} of ${racks.length}` }}
               accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
               onAccessibilityAction={(e) => goTo(current + (e.nativeEvent.actionName === 'increment' ? 1 : -1))}
             >
-              {racks.map((rack, i) => {
-                const hasHits = !q || rack.some((p) => p.hits > 0);
-                return (
-                  <Pressable key={i} onPress={() => goTo(i)} hitSlop={{ top: 4, bottom: 4 }} style={styles.dotHit} accessibilityRole="button" accessibilityLabel={`Rack ${i + 1}`}>
-                    <View style={[styles.dot, { backgroundColor: i === current ? r.lip : r.title, opacity: i === current ? 1 : hasHits ? 0.35 : 0.1 }]} />
-                  </Pressable>
-                );
-              })}
+              <FloorDots count={racks.length} current={current} dimmed={(i) => !!q && !racks[i].some((p) => p.hits > 0)} onPick={goTo} />
             </View>
           ) : null}
-        </Counter>
+        </View>
       </View>
 
       {shownPocket && viewer && root.w > 0 ? (
@@ -274,6 +294,7 @@ export default function LibraryRackScreen() {
           topInset={insets.top}
           bottomInset={insets.bottom}
           motion={motion}
+          rich={rich}
           closing={viewer.closing}
           onClose={closeViewer}
           onClosed={clearViewer}
@@ -284,8 +305,8 @@ export default function LibraryRackScreen() {
   );
 }
 
-/** One rack of pockets. While swiping, racks turn slightly, like walking past them in a shop. */
-function RackPage({
+/** One bookcase of stacks. While swiping, cases turn slightly, like walking past them in a shop. */
+function CasePage({
   index,
   width,
   drawn,
@@ -295,6 +316,7 @@ function RackPage({
   empty,
   searching,
   motion,
+  rich,
   scrollX,
   onPocket,
 }: {
@@ -307,13 +329,14 @@ function RackPage({
   empty: boolean;
   searching: boolean;
   motion: boolean;
+  rich: boolean;
   scrollX: SharedValue<number>;
   onPocket: (key: string) => void;
 }) {
   const turn = useAnimatedStyle(() => {
-    if (!motion) return { transform: [{ perspective: 1000 }, { rotateX: '2deg' }] };
+    if (!motion) return { transform: [{ perspective: 1000 }] };
     const d = Math.max(-1, Math.min(1, (scrollX.get() - index * width) / Math.max(1, width)));
-    return { transform: [{ perspective: 1000 }, { rotateX: '2deg' }, { rotateY: `${-14 * d}deg` }, { scale: 1 - 0.06 * Math.abs(d) }] };
+    return { transform: [{ perspective: 1000 }, { rotateY: `${-12 * d}deg` }, { scale: 1 - 0.05 * Math.abs(d) }] };
   });
 
   const { cols, rows, posterW, posterH } = layout;
@@ -321,11 +344,19 @@ function RackPage({
     <Animated.View style={[{ width }, turn]}>
       {drawn ? (
         <>
-          <RackTop />
+          <CaseTop screenW={width} />
           {Array.from({ length: rows }, (_, row) => {
             const slots = Array.from({ length: cols }, (_, c) => rack[row * cols + c] ?? null);
             return (
-              <PocketShelf key={row} cols={cols} posterW={posterW} labels={slots.map((p) => (p ? lipLabel(p, searching) : null))}>
+              <CaseShelf
+                key={row}
+                screenW={width}
+                posterW={posterW}
+                posterH={posterH}
+                eye={eyeLevel(row, rows)}
+                rich={rich}
+                tags={slots.map((p) => (p ? tagLabel(p, searching) : null))}
+              >
                 {slots.map((p, c) =>
                   p ? (
                     <PocketView
@@ -337,23 +368,24 @@ function RackPage({
                       height={posterH}
                       dimmed={searching && p.hits === 0}
                       motion={motion}
+                      rich={rich}
                       onPress={onPocket}
                     />
                   ) : (
-                    <EmptyPocket key={`empty-${c}`} width={posterW} height={posterH} dashed={empty && !loading} />
+                    <EmptyPocket key={`empty-${c}`} width={posterW} height={posterH} outline={empty && !loading} />
                   ),
                 )}
-              </PocketShelf>
+              </CaseShelf>
             );
           })}
-          <RackFeet />
+          <CaseBase screenW={width} />
         </>
       ) : null}
     </Animated.View>
   );
 }
 
-function lipLabel(p: ShownPocket, searching: boolean): string {
+function tagLabel(p: ShownPocket, searching: boolean): string {
   const n = p.items.length;
   if (searching) return p.hits ? `${p.label} · ${p.hits}/${n}` : p.label;
   return n > 1 ? `${p.label} · ${n}` : p.label;
@@ -366,7 +398,7 @@ function spokenLabel(p: ShownPocket, searching: boolean): string {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: RACK.margin, paddingBottom: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: CASE.margin, paddingBottom: 12 },
   middle: { flex: 1, minHeight: 56, justifyContent: 'center' },
   round: { width: minTouch, height: minTouch, borderRadius: minTouch / 2, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   overline: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 1.6, lineHeight: 15, fontVariant: ['tabular-nums'] },
@@ -374,11 +406,11 @@ const styles = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: minTouch, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1.5 },
   searchInput: { flex: 1, fontFamily: fontFamily.regular, fontSize: 16, paddingVertical: 0 },
   found: { fontFamily: fontFamily.medium, fontSize: 13, fontVariant: ['tabular-nums'] },
-  noteWrap: { ...StyleSheet.absoluteFill, justifyContent: 'center', paddingHorizontal: RACK.margin + 18 },
-  note: { padding: 16, borderRadius: 4, borderWidth: 1, gap: 6, transform: [{ rotate: '-0.6deg' }] },
+  noteWrap: { ...StyleSheet.absoluteFill, justifyContent: 'center', paddingHorizontal: CASE.margin + 24 },
+  note: { padding: 16, borderRadius: 3, borderWidth: 1, gap: 6, transform: [{ rotate: '-0.6deg' }] },
   noteTitle: { fontFamily: fontFamily.display, fontSize: 20, lineHeight: 26 },
   noteBody: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 20 },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  dotHit: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  floor: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  /** The case's outline (oak top included), so light laid over it stays on it. */
+  caseClip: { position: 'absolute', top: 0, bottom: 0, left: CASE.margin - CASE.overhang, right: CASE.margin - CASE.overhang, overflow: 'hidden' },
 });
