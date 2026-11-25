@@ -65,6 +65,41 @@ def _absolute_features(cut):
     return cut
 
 
+class _FitsCtc:
+    """
+    Keeps a training cut only if CTC can align its text: at least one encoder output frame per word
+    piece, plus one between two identical pieces in a row. A cut that cannot be aligned gives an
+    infinite CTC loss; in fp16 every batch holding one is skipped and halves the grad scale, until
+    finetune.py stops with "grad_scale is too small". (icefall's own recipes drop these cuts too.)
+    Picklable, so the dataloader workers can use it; the word-piece model loads on first use.
+    """
+
+    def __init__(self, bpe_model: str):
+        self.bpe_model = str(bpe_model)
+        self.sp = None
+        self.dropped = 0
+
+    def __getstate__(self):
+        return {"bpe_model": self.bpe_model, "sp": None, "dropped": 0}
+
+    def __call__(self, cut) -> bool:
+        if self.sp is None:
+            import sentencepiece as spm
+
+            self.sp = spm.SentencePieceProcessor()
+            self.sp.load(self.bpe_model)
+        frames = cut.num_frames if cut.num_frames else int(cut.duration * 100)
+        T = ((frames - 7) // 2 + 1) // 2  # Zipformer: 100 frames a second in, 25 out
+        ids = self.sp.encode(" ".join(s.text for s in cut.supervisions))
+        need = len(ids) + sum(1 for a, b in zip(ids, ids[1:]) if a == b)
+        if T >= need:
+            return True
+        self.dropped += 1
+        if self.dropped <= 5:
+            logging.warning(f"Voxa: dropped {cut.id} ({cut.duration:.1f} s, {T} frames for {need} word pieces): text longer than the audio allows")
+        return False
+
+
 class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser):
@@ -111,7 +146,8 @@ class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
 
     def gigaspeech_subset_small_cuts(self) -> CutSet:
         langs = self._present("train")
-        sets = [self._cuts("train", lang) for lang in langs]
+        fits = _FitsCtc(self.args.bpe_model)
+        sets = [self._cuts("train", lang).filter(fits) for lang in langs]
         if len(sets) == 1:
             return sets[0]
         counts = [self._count("train", lang) for lang in langs]
