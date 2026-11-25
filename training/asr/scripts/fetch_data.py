@@ -305,6 +305,8 @@ def cmd_fleurs(a) -> None:
 
 
 def main() -> None:
+    # In a notebook's %%bash cell stdout is a pipe, which Python buffers: show each line as it happens.
+    sys.stdout.reconfigure(line_buffering=True)
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     nv = sub.add_parser("naijavoices", help="Hausa, Yoruba or Igbo from NaijaVoices (gated)")
