@@ -15,6 +15,16 @@ export function posterTitle(s: SessionMeta): string {
   return s.kind === 'listen' ? t.replace(/^Meeting,\s*/, '') || t : t;
 }
 
+/** One line under a big poster: "Today · 30 min · 3 speakers · 1 mark". */
+export function posterMeta(s: SessionMeta, now = Date.now()): string {
+  if (s.kind === 'scan') return `Scanned · ${formatDay(s.startedAt, now)}`;
+  const parts = [formatDay(s.startedAt, now), formatDuration(s.durationMs)];
+  if (s.speakers) parts.push(`${s.speakers} ${s.speakers === 1 ? 'speaker' : 'speakers'}`);
+  if (s.marks.length) parts.push(`${s.marks.length} ${s.marks.length === 1 ? 'mark' : 'marks'}`);
+  if (s.status === 'recovered') parts.push('recovered');
+  return parts.join(' · ');
+}
+
 /** What TalkBack and VoiceOver read for a poster. */
 export function posterA11yLabel(s: SessionMeta, now = Date.now()): string {
   if (s.kind === 'scan') return `${s.title}. Scanned ${formatDay(s.startedAt, now)}.`;

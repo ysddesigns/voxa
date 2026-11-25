@@ -109,6 +109,10 @@ export type RackPalette = {
   overline: string;
   /** Drawn over the posters to sit them in the room's light. */
   posterVeil: string;
+  /** Dims the rack behind a stack pulled out of its pocket, and the text on it. */
+  scrim: string;
+  onScrim: string;
+  onScrimSecondary: string;
 };
 
 export const rackLight: RackPalette = {
@@ -125,6 +129,9 @@ export const rackLight: RackPalette = {
   title: '#2A2118',
   overline: '#5C4B36',
   posterVeil: 'rgba(0,0,0,0)',
+  scrim: 'rgba(42,33,24,0.82)',
+  onScrim: '#FFF7E2',
+  onScrimSecondary: '#E3D6BC',
 };
 
 /** Night: the same room by moonlight. */
@@ -142,6 +149,9 @@ export const rackDark: RackPalette = {
   title: '#F3EBD9',
   overline: '#B9AE9A',
   posterVeil: 'rgba(8,10,20,0.22)',
+  scrim: 'rgba(0,0,0,0.78)',
+  onScrim: '#F3EBD9',
+  onScrimSecondary: '#C9BFAC',
 };
 
 /** The shape scale. Old names (chip, hero, tile, icon) map onto it. */

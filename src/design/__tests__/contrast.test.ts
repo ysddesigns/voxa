@@ -13,6 +13,13 @@ function luminance(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** An rgba() colour laid over a solid hex one, as hex. */
+function over(rgba: string, base: string): string {
+  const [r, g, b, a] = rgba.match(/[\d.]+/g)!.map(Number);
+  const mix = (top: number, i: number) => Math.round(top * a + parseInt(base.slice(i, i + 2), 16) * (1 - a));
+  return `#${[mix(r, 1), mix(g, 3), mix(b, 5)].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function contrast(a: string, b: string) {
   const [x, y] = [luminance(a), luminance(b)];
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
@@ -55,6 +62,13 @@ describe.each([
     ['lip label', r.onLip, r.lip],
   ])('%s text is at least 4.5:1', (_label, fg, bg) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  // The scrim is see-through: test text on it laid over the wall's lightest light.
+  it.each([
+    ['onScrim', r.onScrim],
+    ['onScrimSecondary', r.onScrimSecondary],
+  ])('%s text is at least 4.5:1 on the scrim over the wall', (_label, fg) => {
+    expect(contrast(fg, over(r.scrim, r.wallLight))).toBeGreaterThanOrEqual(4.5);
   });
   it('wire marks are at least 3:1 on the wall', () => {
     expect(contrast(r.wire, r.wall)).toBeGreaterThanOrEqual(3);

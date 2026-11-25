@@ -1,7 +1,7 @@
 import type { SessionMeta } from '@/storage/sessions';
-import { posterA11yLabel, posterOverline, posterTitle } from '../labels';
+import { posterA11yLabel, posterMeta, posterOverline, posterTitle } from '../labels';
 import { BANDS, hashId, heightFromDuration, posterScene, timeOfDay } from '../poster-art';
-import { bucketLabel, buildShelves, postersPerRow, startOfWeek } from '../shelves';
+import { bucketLabel, startOfWeek } from '../shelves';
 
 const at = (y: number, m: number, d: number, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
 // Wednesday 25 Nov 2026, 15:00.
@@ -18,7 +18,7 @@ const meta = (over: Partial<SessionMeta> = {}): SessionMeta => ({
   ...over,
 });
 
-describe('shelves', () => {
+describe('time buckets', () => {
   it('starts the week on Monday', () => {
     expect(new Date(startOfWeek(NOW)).getDate()).toBe(23);
     expect(new Date(startOfWeek(at(2026, 11, 23, 0, 0))).getDate()).toBe(23);
@@ -32,30 +32,6 @@ describe('shelves', () => {
     expect(bucketLabel(at(2026, 11, 3), NOW)).toBe('NOVEMBER');
     expect(bucketLabel(at(2026, 10, 3), NOW)).toBe('OCTOBER');
     expect(bucketLabel(at(2025, 10, 3), NOW)).toBe('OCTOBER 2025');
-  });
-
-  it('splits each bucket into rows of the given size, keeping order', () => {
-    const days = [25, 24, 24, 23, 18, 2];
-    const items = days.map((d, i) => ({ i, at: at(2026, 11, d) }));
-    const rows = buildShelves(items, (x) => x.at, 3, NOW);
-    expect(rows.map((r) => [r.label, r.items.map((x) => x.i), r.count, r.first])).toEqual([
-      ['THIS WEEK', [0, 1, 2], 4, true],
-      ['THIS WEEK', [3], 4, false],
-      ['LAST WEEK', [4], 1, true],
-      ['NOVEMBER', [5], 1, true],
-    ]);
-    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
-  });
-
-  it('returns no rows for nothing saved', () => {
-    expect(buildShelves([], () => 0, 3, NOW)).toEqual([]);
-  });
-
-  it('fits fewer posters with large text and more on tablets', () => {
-    expect(postersPerRow(390, 1)).toBe(3);
-    expect(postersPerRow(390, 1.5)).toBe(2);
-    expect(postersPerRow(700, 1)).toBe(4);
-    expect(postersPerRow(1000, 1)).toBe(5);
   });
 });
 
@@ -174,6 +150,11 @@ describe('poster text', () => {
     expect(posterOverline(meta({ durationMs: 65 * 60000 }))).toBe('MEETING · 1 H 5 M');
     expect(posterOverline(meta({ durationMs: 120 * 60000, status: 'recovered' }))).toBe('RECOVERED · 2 H');
     expect(posterOverline(meta({ kind: 'scan' }))).toBe('SCAN');
+  });
+
+  it('writes the line under a big poster', () => {
+    expect(posterMeta(meta({ speakers: 1, marks: [{ atMs: 1 }, { atMs: 2 }] }), NOW)).toBe('Today · 30 min · 1 speaker · 2 marks');
+    expect(posterMeta(meta({ kind: 'scan' }), NOW)).toBe('Scanned · Today');
   });
 
   it('gives screen readers the full story', () => {
