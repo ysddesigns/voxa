@@ -15,6 +15,8 @@ export type Labelling = { id: string; fraction: number; error: string | null; do
 
 type ListenValue = RecorderState & {
   elapsedMs: () => number;
+  /** Subscribes to the mic level (not in state: it changes many times a second). */
+  onLevel: (fn: (rms: number) => void) => () => void;
   start: () => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -107,6 +109,7 @@ export function ListenSessionProvider({ children, store }: { children: ReactNode
     () => ({
       ...state,
       elapsedMs: () => recorder.elapsedMs(),
+      onLevel: (fn: (rms: number) => void) => recorder.onLevel(fn),
       start: () => {
         // Remembered so a low-memory phone warms up the listening model first next time.
         if (prefs.lastUsed !== 'listen') update({ lastUsed: 'listen' });

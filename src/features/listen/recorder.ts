@@ -17,7 +17,6 @@ export type RecorderState = {
   segments: TranscriptSegment[];
   /** The sentence still being heard. */
   partial: string;
-  level: number;
   marks: Mark[];
   error: string | null;
 };
@@ -29,7 +28,7 @@ export function friendlyError(err: unknown): string {
   return message || 'Could not start listening';
 }
 
-export const IDLE: RecorderState = { status: 'idle', sessionId: null, title: '', segments: [], partial: '', level: 0, marks: [], error: null };
+export const IDLE: RecorderState = { status: 'idle', sessionId: null, title: '', segments: [], partial: '', marks: [], error: null };
 
 const SAVE_EVERY_MS = 5000;
 
@@ -38,6 +37,11 @@ export class ListenRecorder {
   private session: ListenSession | null = null;
   private writes: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Mic level listeners. Level arrives with every audio buffer, many times a second, so it is
+   * not part of the state: putting it there would redraw every screen that reads the session.
+   */
+  private levelListeners = new Set<(rms: number) => void>();
   /** Runs after every stop, from the app or the notification's Stop button (speaker labels, list reload). */
   private afterStop: ((id: string | null) => void) | null = null;
 
@@ -55,6 +59,18 @@ export class ListenRecorder {
 
   get current() {
     return this.state;
+  }
+
+  /** Calls fn with each mic level (0 while paused or stopped); returns the unsubscribe. */
+  onLevel(fn: (rms: number) => void): () => void {
+    this.levelListeners.add(fn);
+    return () => {
+      this.levelListeners.delete(fn);
+    };
+  }
+
+  private level(rms: number) {
+    for (const fn of this.levelListeners) fn(rms);
   }
 
   elapsedMs() {
@@ -90,7 +106,7 @@ export class ListenRecorder {
       this.session = await this.engine.start((e) => {
         switch (e.type) {
           case 'level':
-            this.set({ level: e.rms });
+            this.level(e.rms);
             break;
           case 'segment':
             if (e.segment.final) {
@@ -106,7 +122,8 @@ export class ListenRecorder {
             }
             break;
           case 'paused':
-            this.set({ status: 'paused', level: 0 });
+            this.set({ status: 'paused' });
+            this.level(0);
             break;
           case 'resumed':
             this.set({ status: 'listening' });
@@ -158,7 +175,8 @@ export class ListenRecorder {
     const id = this.state.sessionId;
     const session = this.session;
     if (!id || !session || this.state.status === 'stopping') return null;
-    this.set({ status: 'stopping', level: 0 });
+    this.set({ status: 'stopping' });
+    this.level(0);
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     let segments: TranscriptSegment[] = this.state.segments;

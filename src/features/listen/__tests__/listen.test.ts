@@ -187,6 +187,24 @@ describe('ListenRecorder', () => {
     expect(rec.current.status).toBe('idle');
   });
 
+  it('sends mic levels to subscribers without changing the shared state', async () => {
+    const { rec, emit, states } = setup();
+    await rec.start();
+    const levels: number[] = [];
+    const off = rec.onLevel((rms) => levels.push(rms));
+    const before = states.length;
+    emit({ type: 'level', rms: 0.2 });
+    emit({ type: 'level', rms: 0.3 });
+    expect(levels).toEqual([0.2, 0.3]);
+    // No state change, so no screen reading the session redraws for a level.
+    expect(states.length).toBe(before);
+    emit({ type: 'paused', reason: 'user' });
+    expect(levels[levels.length - 1]).toBe(0);
+    off();
+    emit({ type: 'level', rms: 0.5 });
+    expect(levels).not.toContain(0.5);
+  });
+
   it('saves each sentence and mark as it happens, then the summary on stop', async () => {
     const { rec, store, emit, setElapsed } = setup();
     await rec.start();
