@@ -1,19 +1,41 @@
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon, type IconName } from '@/components/icons';
+import { Icon } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
+import { POSTER_RATIO, PosterFace, PosterSheet } from '@/components/rack/poster';
+import { PosterArt } from '@/components/rack/poster-art';
+import { WindowLight } from '@/components/rack/room';
+import { OnAirSign } from '@/components/scene/on-air-sign';
 import { Waveform } from '@/components/waveform';
+import { useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
+import { textScene, voiceScene } from '@/features/library-rack/poster-art';
 import { useModels } from '@/features/packs/models';
 import { formatMB } from '@/features/packs/rules';
 import { usePrefs } from '@/features/settings/prefs';
 import { useSpeakSession } from '@/features/speak/speak-session';
+import type { SessionMeta } from '@/storage/sessions';
 
 const HELLO = 'Hello. I am your Voxa voice. I work on this phone, even with no internet.';
+
+/** The example poster on the first step: a morning meeting with three speakers and a mark. */
+const EXAMPLE: SessionMeta = {
+  id: 'welcome-example',
+  kind: 'listen',
+  title: 'Your meetings',
+  startedAt: new Date(2026, 0, 5, 10, 0).getTime(),
+  durationMs: 32 * 60_000,
+  status: 'saved',
+  marks: [{ atMs: 12 * 60_000 }],
+  speakers: 3,
+};
+
+const ART_W = 100;
+const ART_H = Math.round(ART_W * POSTER_RATIO);
 
 /** First run: what Voxa does, a voice check, and the one download Listen needs. */
 export default function Welcome() {
@@ -26,6 +48,8 @@ export default function Welcome() {
   const [step, setStep] = useState(0);
   const [heard, setHeard] = useState(false);
   const wasSaying = useRef(false);
+  const { rich, motion } = useSceneQuality();
+  const screen = useWindowDimensions();
 
   // The voice check counts once the sample has played to the end without an error.
   useEffect(() => {
@@ -45,24 +69,20 @@ export default function Welcome() {
     router.replace('/');
   };
 
-  const steps: { icon: IconName; title: string; body: string }[] = [
+  const steps: { title: string; body: string }[] = [
     {
-      icon: 'chat',
       title: 'Voxa speaks and listens for you',
       body: 'Type and Voxa says it out loud. Turn on Live and Voxa writes down what people say. Scan printed text and Voxa reads it.',
     },
     {
-      icon: 'speaker',
       title: 'Hear your voice',
       body: 'Voices are built into the app and work offline. Tap play to check the sound.',
     },
     {
-      icon: 'mic',
       title: 'Set up listening',
       body: `Live captions need one download of ${formatMB(models.bytes('listen'))}. Best on Wi-Fi. After that, everything works offline.`,
     },
     {
-      icon: 'lock',
       title: 'Private by design',
       body: 'What you say, hear, type and scan stays on this phone. Voxa asks for the microphone the first time you listen, and the camera the first time you scan.',
     },
@@ -73,6 +93,8 @@ export default function Welcome() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+      {/* The room's window light on the wall, as in the Library. */}
+      <WindowLight width={screen.width} height={screen.height} strength={0.55} simple={!rich} />
       <View style={styles.top}>
         <View style={styles.dots} accessibilityLabel={`Step ${step + 1} of ${steps.length}`}>
           {steps.map((_, i) => (
@@ -85,9 +107,7 @@ export default function Welcome() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-          <Icon name={s.icon} size={34} color={colors.onAccent} />
-        </View>
+        <StepArt step={step} speaking={speak.saying === HELLO} listenReady={models.ready.listen} motion={motion} rich={rich} />
         <Text style={[type.largeTitle, { color: colors.text }]} accessibilityRole="header">
           {s.title}
         </Text>
@@ -146,13 +166,52 @@ export default function Welcome() {
   );
 }
 
+/**
+ * Each step shows one thing from the house the person is about to walk around: a meeting's
+ * poster (Library), a voice's sleeve (Voices), the ON AIR sign (Live, lit once listening is set
+ * up) and a printed page that stays on the phone. Decoration only: the words say it all.
+ */
+function StepArt({ step, speaking, listenReady, motion, rich }: { step: number; speaking: boolean; listenReady: boolean; motion: boolean; rich: boolean }) {
+  const voice = useMemo(() => voiceScene({ id: 'welcome-voice', tags: ['Warm'] }), []);
+  const page = useMemo(() => textScene('What you say, hear, type and scan stays on this phone.'), []);
+  let art;
+  if (step === 0) {
+    art = <PosterFace item={{ kind: 'session', meta: EXAMPLE }} width={ART_W} height={ART_H} motion={false} rich={rich} />;
+  } else if (step === 1) {
+    art = (
+      <PosterSheet
+        band={voice.band}
+        overline={speaking ? 'SPEAKING' : 'YOUR VOICE'}
+        dot={speaking ? 'breathing' : 'still'}
+        title="Hello"
+        art={<PosterArt scene={voice} id="welcome-voice" />}
+        width={ART_W}
+        height={ART_H}
+        motion={motion}
+        rich={rich}
+      />
+    );
+  } else if (step === 2) {
+    art = <OnAirSign lit={listenReady} motion={motion} rich={rich} />;
+  } else {
+    art = (
+      <PosterSheet band={page.band} overline="ON THIS PHONE" title="Only yours" art={<PosterArt scene={page} id="welcome-page" />} width={ART_W} height={ART_H} rich={rich} />
+    );
+  }
+  return (
+    <View style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {art}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 24 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dots: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   dot: { height: 8, borderRadius: 4 },
   body: { gap: 16, paddingVertical: 32 },
-  badge: { width: 72, height: 72, borderRadius: 20, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
+  art: { minHeight: ART_H, justifyContent: 'center', alignItems: 'flex-start', marginBottom: 4 },
   card: { borderRadius: radius.card, padding: 16, gap: 12 },
   ok: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actions: { flexDirection: 'row', gap: 10 },

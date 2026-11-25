@@ -124,6 +124,9 @@ export type RackPalette = {
   floor: string;
   floorDark: string;
   floorLine: string;
+  /** The Phrases pinboard: cork and its darker grain. */
+  cork: string;
+  corkGrain: string;
   /** Soft cast shadows, and the darkening where surfaces meet (ambient occlusion). */
   shadow: string;
   ao: string;
@@ -161,6 +164,8 @@ export const rackLight: RackPalette = {
   floor: '#C48E57',
   floorDark: '#9C6A3A',
   floorLine: 'rgba(92,56,24,0.32)',
+  cork: '#A88052',
+  corkGrain: '#7A5934',
   shadow: 'rgba(72,52,30,0.22)',
   ao: 'rgba(60,44,28,0.30)',
   tagBg: '#FBF7EE',
@@ -193,6 +198,8 @@ export const rackDark: RackPalette = {
   floor: '#563A23',
   floorDark: '#352214',
   floorLine: 'rgba(0,0,0,0.38)',
+  cork: '#6E5438',
+  corkGrain: '#4A3622',
   shadow: 'rgba(0,0,0,0.42)',
   ao: 'rgba(0,0,0,0.48)',
   tagBg: '#E9E1D2',
@@ -222,6 +229,9 @@ export const onAirSign = {
   inkOff: '#A07A6C',
   glow: '#FF7A4D',
 } as const;
+
+/** The pin holding a phrase card: fixed art colours, as on the posters. */
+export const pinArt = { head: '#D63F1C', shine: '#FF9C7E', needle: '#8A8F96' } as const;
 
 /** The shape scale. Old names (chip, hero, tile, icon) map onto it. */
 export const radius = {

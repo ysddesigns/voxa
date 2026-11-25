@@ -78,6 +78,7 @@ describe.each([
     expect(contrast(fg, over(r.scrim, r.light))).toBeGreaterThanOrEqual(4.5);
   });
   it.each([
+    ['phrase cards on the cork', r.tagBg, r.cork],
     ['button borders on the wall', r.control, r.wall],
     ['the current-rack dot on its tag', r.accent, r.tagBg],
   ])('%s are at least 3:1', (_label, fg, bg) => {

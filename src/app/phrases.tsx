@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
+import { PinnedCard, Pinboard } from '@/components/scene/pinboard';
+import { useScene, useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -18,6 +20,10 @@ export default function PhrasesScreen() {
   const insets = useSafeAreaInsets();
   const s = useSpeakSession();
   const { prefs, update } = usePrefs();
+  const { r } = useScene();
+  const { rich } = useSceneQuality();
+  // Large text: one card per row, so a phrase never squeezes into half the board.
+  const oneColumn = useWindowDimensions().fontScale >= 1.3;
   const [phrases, setPhrases] = useState<Phrase[] | null>(null);
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -128,34 +134,60 @@ export default function PhrasesScreen() {
           <Text style={[type.body, { color: colors.textTertiary }]}>No phrases yet. Type one above and tap Save as phrase.</Text>
         ) : null}
 
-        <View style={[styles.list, { backgroundColor: colors.card }]}>
-          {(phrases ?? []).map((p, i) => {
-            const speaking = s.saying === p.text;
-            const border = i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator } : null;
-            if (editing && editId === p.id) {
-              const save = () => {
-                change(phraseStore.update(p.id, editText));
-                setEditId(null);
-              };
-              return (
-                <View key={p.id} style={[styles.item, border]}>
-                  <TextInput
-                    value={editText}
-                    onChangeText={setEditText}
-                    autoFocus
-                    multiline
-                    maxLength={MAX_PHRASE}
-                    onBlur={save}
-                    accessibilityLabel="Edit phrase"
-                    style={[type.body, { color: colors.text, flex: 1, paddingVertical: 4 }]}
-                  />
-                  <Pressable onPress={save} accessibilityRole="button" accessibilityLabel="Save phrase" style={styles.small}>
-                    <Icon name="check" size={22} color={colors.accent} onColor={colors.onAccent} />
-                  </Pressable>
-                </View>
-              );
-            }
-            if (editing) {
+        {/* Phrases pinned to a cork board, one tap to say each. Edit turns them back into a list. */}
+        {!editing && phrases && phrases.length > 0 ? (
+          <Pinboard rich={rich}>
+            <View style={styles.grid}>
+              {phrases.map((p) => {
+                const speaking = s.saying === p.text;
+                return (
+                  <PinnedCard
+                    key={p.id}
+                    seed={p.id}
+                    active={speaking}
+                    onPress={() => s.say(p.text)}
+                    accessibilityLabel={speaking ? `Stop: ${p.text}` : `Say: ${p.text}`}
+                    rich={rich}
+                    style={{ flexGrow: 1, flexBasis: oneColumn ? '100%' : '40%' }}
+                  >
+                    <Text style={[type.body, { color: r.tagText, flex: 1 }]}>{p.text}</Text>
+                    <View style={styles.cardIcon}>
+                      <Icon name={speaking ? 'stop' : discreet ? 'lock' : 'speaker'} size={16} color={speaking ? colors.accent : r.tagText} />
+                    </View>
+                  </PinnedCard>
+                );
+              })}
+            </View>
+          </Pinboard>
+        ) : null}
+
+        {editing ? (
+          <View style={[styles.list, { backgroundColor: colors.card }]}>
+            {(phrases ?? []).map((p, i) => {
+              const border = i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.separator } : null;
+              if (editId === p.id) {
+                const save = () => {
+                  change(phraseStore.update(p.id, editText));
+                  setEditId(null);
+                };
+                return (
+                  <View key={p.id} style={[styles.item, border]}>
+                    <TextInput
+                      value={editText}
+                      onChangeText={setEditText}
+                      autoFocus
+                      multiline
+                      maxLength={MAX_PHRASE}
+                      onBlur={save}
+                      accessibilityLabel="Edit phrase"
+                      style={[type.body, { color: colors.text, flex: 1, paddingVertical: 4 }]}
+                    />
+                    <Pressable onPress={save} accessibilityRole="button" accessibilityLabel="Save phrase" style={styles.small}>
+                      <Icon name="check" size={22} color={colors.accent} onColor={colors.onAccent} />
+                    </Pressable>
+                  </View>
+                );
+              }
               return (
                 <View key={p.id} style={[styles.item, border]}>
                   <Pressable
@@ -188,21 +220,9 @@ export default function PhrasesScreen() {
                   </Pressable>
                 </View>
               );
-            }
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => s.say(p.text)}
-                accessibilityRole="button"
-                accessibilityLabel={speaking ? `Stop: ${p.text}` : `Say: ${p.text}`}
-                style={({ pressed }) => [styles.item, border, (pressed || speaking) && { backgroundColor: colors.highlight, marginHorizontal: -16, paddingHorizontal: 16 }]}
-              >
-                <Text style={[type.body, { color: colors.text, flex: 1 }]}>{p.text}</Text>
-                <Icon name={speaking ? 'stop' : discreet ? 'lock' : 'speaker'} size={18} color={speaking ? colors.accent : colors.textTertiary} />
-              </Pressable>
-            );
-          })}
-        </View>
+            })}
+          </View>
+        ) : null}
 
         {editing ? (
           <Pressable
@@ -234,4 +254,6 @@ const styles = StyleSheet.create({
   list: { borderRadius: radius.card, paddingHorizontal: 16, overflow: 'hidden' },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: minTouch + 8, paddingVertical: 10 },
   small: { width: minTouch, height: minTouch, alignItems: 'center', justifyContent: 'center' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 14 },
+  cardIcon: { alignSelf: 'flex-end', marginTop: 6, opacity: 0.8 },
 });
