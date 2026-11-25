@@ -59,7 +59,7 @@ def download(repo: str, filename: str, into: Path) -> Path:
 
 def report(out: Output, stats: Counter) -> None:
     print(out.summary())
-    skipped = {k: v for k, v in stats.items() if k != "kept"}
+    skipped = Counter({k: v for k, v in stats.items() if k != "kept"})
     if skipped:
         print("  not kept: " + ", ".join(f"{k} {v}" for k, v in skipped.most_common()))
 
