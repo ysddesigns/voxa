@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
@@ -24,20 +24,6 @@ export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const router = useRouter();
-  const navigation = useNavigation();
-  // DBGNAV temporary
-  const dbgNav = (tag: string) => {
-    try {
-      const st: any = navigation.getState();
-      console.log('DBGNAV', tag, Date.now(), String(id), JSON.stringify(st?.routes?.map((r: any) => [r.name, r.params?.id ?? '', r.state ? (r.state.history ?? r.state.index) : null])));
-    } catch (e) {
-      console.log('DBGNAV err', String(e));
-    }
-  };
-  useEffect(() => {
-    dbgNav('mount');
-    return () => dbgNav('unmount');
-  }, []);
   const insets = useSafeAreaInsets();
   const l = useListen();
   const speak = useSpeakSession();
@@ -107,13 +93,10 @@ export default function SessionScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          dbgNav('delete-press');
           if (working) l.cancelLabel();
           await sessionStore.remove(session.id);
           l.bump();
-          dbgNav('before-back');
           router.back();
-          setTimeout(() => dbgNav('after-back'), 300);
         },
       },
     ]);

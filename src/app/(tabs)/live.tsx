@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ModelRow } from '@/components/model-row';
 import { OnAirSign } from '@/components/scene/on-air-sign';
-import { PaperShadow } from '@/components/scene/shadows';
+import { PaperSheet } from '@/components/scene/paper';
 import { Screen } from '@/components/screen';
 import { Card, Group, ListRow } from '@/components/ui';
 import { announce, useScreenReader } from '@/design/a11y';
@@ -358,42 +358,39 @@ function Listening() {
       <Level paused={paused || busy} />
 
       {/* The captions on a plain sheet of paper: nothing drawn over the words. */}
-      <View style={styles.sheetWrap}>
-        <PaperShadow rich={rich} />
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
-          <FlatList
-            ref={list}
-            style={{ flex: 1 }}
-            accessibilityLabel="Captions"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}
-            data={data}
-            keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}
-            // Jump, not glide: words arrive several times a second, and an animated scroll each
-            // time keeps the list always mid-animation on a slow phone.
-            onContentSizeChange={() => following.current && list.current?.scrollToEnd({ animated: false })}
-            onScroll={onScroll}
-            scrollEventThrottle={100}
-            ListEmptyComponent={
-              <Text style={[type.body, { color: colors.textTertiary }]}>
-                {busy ? 'Getting the microphone ready…' : paused ? 'Paused. Nothing is being heard.' : 'Listening… words appear here as people speak.'}
-              </Text>
-            }
-            renderItem={renderItem}
-          />
-          {!follow && data.length > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Jump to latest"
-              accessibilityHint="Scrolls to the newest words and follows them again"
-              onPress={jumpToLatest}
-              style={({ pressed }) => [styles.jump, { backgroundColor: colors.primaryFill, opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Icon name="chevronDown" size={18} color={colors.onPrimary} />
-              <Text style={[type.subheadline, { color: colors.onPrimary, fontFamily: type.headline.fontFamily }]}>Jump to latest</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+      <PaperSheet rich={rich} style={styles.sheetWrap} contentStyle={styles.sheet}>
+        <FlatList
+          ref={list}
+          style={{ flex: 1 }}
+          accessibilityLabel="Captions"
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}
+          data={data}
+          keyExtractor={(r, i) => (r.kind === 'seg' ? r.seg.id : r.kind === 'mark' ? `m${r.n}` : `p${i}`)}
+          // Jump, not glide: words arrive several times a second, and an animated scroll each
+          // time keeps the list always mid-animation on a slow phone.
+          onContentSizeChange={() => following.current && list.current?.scrollToEnd({ animated: false })}
+          onScroll={onScroll}
+          scrollEventThrottle={100}
+          ListEmptyComponent={
+            <Text style={[type.body, { color: colors.textTertiary }]}>
+              {busy ? 'Getting the microphone ready…' : paused ? 'Paused. Nothing is being heard.' : 'Listening… words appear here as people speak.'}
+            </Text>
+          }
+          renderItem={renderItem}
+        />
+        {!follow && data.length > 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Jump to latest"
+            accessibilityHint="Scrolls to the newest words and follows them again"
+            onPress={jumpToLatest}
+            style={({ pressed }) => [styles.jump, { backgroundColor: colors.primaryFill, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Icon name="chevronDown" size={18} color={colors.onPrimary} />
+            <Text style={[type.subheadline, { color: colors.onPrimary, fontFamily: type.headline.fontFamily }]}>Jump to latest</Text>
+          </Pressable>
+        ) : null}
+      </PaperSheet>
 
       {l.error ? <Text style={[type.caption, { color: colors.accentText, paddingHorizontal: 20 }]}>{l.error}</Text> : null}
 
@@ -493,7 +490,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20 },
   title: { paddingHorizontal: 20, marginTop: 10 },
   sheetWrap: { flex: 1, marginHorizontal: 16, marginTop: 4 },
-  sheet: { flex: 1, borderRadius: 3, overflow: 'hidden' },
+  sheet: { flex: 1 },
   sign: { marginTop: 12, marginBottom: 4 },
   ready: { alignItems: 'center', gap: 20, paddingTop: 8, paddingBottom: 8 },
   start: { width: 120, height: 120, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', marginTop: 12 },

@@ -32,7 +32,6 @@ const pairs: [Key, Key][] = [
   ...textColours.flatMap((t) => surfaces.map((s) => [t, s] as [Key, Key])),
   ['onAccent', 'accent'],
   ['onPrimary', 'primaryFill'],
-  ['text', 'art'],
 ];
 const marks: [Key, Key][] = [
   ['accent', 'background'],

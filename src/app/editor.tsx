@@ -4,8 +4,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { ProgressWave } from '@/components/progress-wave';
+import { BINDING, PaperSheet } from '@/components/scene/paper';
 import { Button, NavBar } from '@/components/ui';
 import { VoiceAvatar } from '@/components/voice-avatar';
+import { useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { elevation, minTouch, radius, squircle } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -22,6 +24,7 @@ export default function Editor() {
   const insets = useSafeAreaInsets();
   const s = useSpeakSession();
   const { byId } = useVoices();
+  const { rich } = useSceneQuality();
   // voxa://editor?text=... opens the editor with that text (deep links, share-to-Voxa later).
   const { text: incoming, open } = useLocalSearchParams<{ text?: string; open?: string }>();
   const { setText } = s;
@@ -177,7 +180,8 @@ export default function Editor() {
           </View>
         ) : null}
 
-        <View style={[styles.sheet, { backgroundColor: colors.card }]}>
+        {/* The script on a writing pad: plain paper, nothing drawn over the words. */}
+        <PaperSheet binding margin rich={rich} contentStyle={styles.sheet}>
           {showingPlayback && current ? (
             <Pressable
               onPress={s.stop}
@@ -218,7 +222,7 @@ export default function Editor() {
               </Text>
             )}
           </View>
-        </View>
+        </PaperSheet>
       </ScrollView>
 
       <View
@@ -333,7 +337,7 @@ const styles = StyleSheet.create({
   voiceRow: { flexDirection: 'row', gap: 8 },
   voiceChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.card, ...squircle, paddingVertical: 8, paddingLeft: 8, paddingRight: 12 },
   speed: { width: 76, borderRadius: radius.card, ...squircle, alignItems: 'center', justifyContent: 'center' },
-  sheet: { borderRadius: radius.tile, ...squircle, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, gap: 14 },
+  sheet: { paddingLeft: 32, paddingRight: 20, paddingTop: BINDING + 18, paddingBottom: 16, gap: 14 },
   script: { fontFamily: type.body.fontFamily, fontSize: 20, lineHeight: 32 },
   input: { minHeight: 220, padding: 0 },
   sheetFoot: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 12 },

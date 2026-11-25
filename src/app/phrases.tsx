@@ -7,7 +7,7 @@ import { PinnedCard, Pinboard } from '@/components/scene/pinboard';
 import { useScene, useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
-import { type } from '@/design/type';
+import { sceneType, type } from '@/design/type';
 import { MAX_PHRASE, type Phrase } from '@/features/phrases/phrases';
 import { usePrefs } from '@/features/settings/prefs';
 import { useSpeakSession } from '@/features/speak/speak-session';
@@ -52,7 +52,7 @@ export default function PhrasesScreen() {
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={[styles.iconBtn, { backgroundColor: colors.chip }]}>
           <Icon name="chevronLeft" size={20} color={colors.text} />
         </Pressable>
-        <Text style={[type.heading, { color: colors.text, flex: 1 }]} accessibilityRole="header">
+        <Text style={[sceneType.navTitle, { color: colors.text, flex: 1 }]} accessibilityRole="header" numberOfLines={1}>
           Speak for me
         </Text>
         <Pressable onPress={() => router.push('/editor')} accessibilityRole="button" style={[styles.pill, { backgroundColor: colors.chip }]}>

@@ -41,8 +41,6 @@ export type Palette = {
   shadow: string;
   /** Background of the word being spoken. */
   highlight: string;
-  /** Player artwork. */
-  art: string;
 };
 
 /** Day: sunlit plaster, paper cards, warm brown ink. */
@@ -69,7 +67,6 @@ export const light: Palette = {
   tabActiveFill: '#F7DDD1',
   shadow: 'rgba(72,52,30,0.16)',
   highlight: '#FFE1D6',
-  art: '#F58A84',
 };
 
 /** Evening: the same rooms by lamplight. */
@@ -95,7 +92,6 @@ export const dark: Palette = {
   tabActiveFill: '#3A2420',
   shadow: 'rgba(0,0,0,0.5)',
   highlight: '#5A2A1E',
-  art: '#7A3A30',
 };
 
 /**

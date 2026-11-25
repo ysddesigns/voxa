@@ -30,6 +30,10 @@ export const sceneType = {
   overline: { fontFamily: fontFamily.medium, fontSize: 11, letterSpacing: 1.6, lineHeight: 15, fontVariant: ['tabular-nums'] },
   /** The screen's name, one per screen. */
   title: { fontFamily: fontFamily.display, fontSize: 30, lineHeight: 38, letterSpacing: -0.5 },
+  /** A screen's name in its top bar, beside Back. */
+  navTitle: { fontFamily: fontFamily.display, fontSize: 24, lineHeight: 30, letterSpacing: -0.3 },
+  /** The centred title of a navigation bar. */
+  barTitle: { fontFamily: fontFamily.display, fontSize: 18, lineHeight: 24 },
   /** Titles on notes and under a big poster. */
   heading: { fontFamily: fontFamily.display, fontSize: 20, lineHeight: 26 },
   body: { fontFamily: fontFamily.regular, fontSize: 15, lineHeight: 20 },

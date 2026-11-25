@@ -1,15 +1,21 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { Icon, type IconName } from '@/components/icons';
+import { PosterArt } from '@/components/rack/poster-art';
+import { PaperSheet } from '@/components/scene/paper';
+import { PaperShadow } from '@/components/scene/shadows';
 import { announce } from '@/design/a11y';
+import { useScene, useSceneQuality } from '@/design/scene';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
-import { type } from '@/design/type';
+import { sceneType, type } from '@/design/type';
 import { useEngines } from '@/engines/provider';
 import { useListen } from '@/features/listen/listen-session';
+import { textScene } from '@/features/library-rack/poster-art';
 import { linesToText, scanTitle, unsureWords } from '@/features/scan/scan-text';
 import { useSpeakSession } from '@/features/speak/speak-session';
 import { sessionStore } from '@/storage';
@@ -28,6 +34,7 @@ export default function ScanScreen() {
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { rich } = useSceneQuality();
 
   const pick = async (camera: boolean) => {
     setError(null);
@@ -87,7 +94,7 @@ export default function ScanScreen() {
         <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={[styles.iconBtn, { backgroundColor: colors.chip }]}>
           <Icon name="chevronLeft" size={20} color={colors.text} />
         </Pressable>
-        <Text style={[type.heading, { color: colors.text, flex: 1 }]} accessibilityRole="header">
+        <Text style={[sceneType.navTitle, { color: colors.text, flex: 1 }]} accessibilityRole="header" numberOfLines={1}>
           Scan text
         </Text>
       </View>
@@ -95,6 +102,7 @@ export default function ScanScreen() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 32, gap: 14 }}>
         {step.kind === 'pick' ? (
           <>
+            <PageUnderLamp rich={rich} />
             <View style={[styles.card, { backgroundColor: colors.card }]}>
               <Text style={[type.body, { color: colors.textSecondary }]}>
                 Take a photo of printed text (a letter, a sign, a menu, a prescription) and Voxa reads it on this phone, with no internet. Photos are not kept.
@@ -138,13 +146,16 @@ export default function ScanScreen() {
               </View>
             ) : null}
 
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              multiline
-              accessibilityLabel="Scanned text"
-              style={[type.body, styles.text, { color: colors.text, backgroundColor: colors.card }]}
-            />
+            {/* The text as read, on a plain sheet to check and fix. */}
+            <PaperSheet rich={rich}>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                multiline
+                accessibilityLabel="Scanned text"
+                style={[type.body, styles.text, { color: colors.text }]}
+              />
+            </PaperSheet>
             {error ? <Text style={[type.callout, { color: colors.accentText }]}>{error}</Text> : null}
 
             <View style={styles.row}>
@@ -166,6 +177,52 @@ export default function ScanScreen() {
         ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+const PAGE_W = 96;
+const PAGE_H = 124;
+
+/**
+ * What Scan does, drawn: a printed page lying in a pool of lamp light, framed by the camera's
+ * corners in the accent. Decoration only.
+ */
+function PageUnderLamp({ rich }: { rich: boolean }) {
+  const { colors } = useTheme();
+  const { r } = useScene();
+  const page = useMemo(() => textScene('A letter, a sign, a menu or a prescription, read on this phone.'), []);
+  return (
+    <View style={styles.lamp} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id="scanPool" cx="0.5" cy="0.5" rx="0.5" ry="0.5">
+            <Stop offset="0" stopColor={r.light} stopOpacity={0.75} />
+            <Stop offset="1" stopColor={r.light} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Ellipse cx={50} cy={52} rx={46} ry={48} fill="url(#scanPool)" />
+      </Svg>
+      <View style={{ width: PAGE_W, height: PAGE_H, transform: [{ rotate: '-4deg' }] }}>
+        <PaperShadow rich={rich} radius={2} />
+        <View style={styles.page}>
+          <PosterArt scene={page} id="scan-page" />
+        </View>
+      </View>
+      {/* The camera's frame round the page. */}
+      <View style={styles.frame} pointerEvents="none">
+        {(['tl', 'tr', 'bl', 'br'] as const).map((c) => (
+          <View
+            key={c}
+            style={[
+              styles.corner,
+              { borderColor: colors.accent },
+              c[0] === 't' ? { top: 0, borderTopWidth: 3 } : { bottom: 0, borderBottomWidth: 3 },
+              c[1] === 'l' ? { left: 0, borderLeftWidth: 3 } : { right: 0, borderRightWidth: 3 },
+            ]}
+          />
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -201,5 +258,9 @@ const styles = StyleSheet.create({
   thumbBig: { width: '100%', height: 220, borderRadius: 20, borderCurve: 'continuous' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: radius.chip, paddingHorizontal: 12, paddingVertical: 6 },
-  text: { borderRadius: radius.card, padding: 16, minHeight: 200, textAlignVertical: 'top' },
+  text: { padding: 16, minHeight: 200, textAlignVertical: 'top' },
+  lamp: { height: 170, alignItems: 'center', justifyContent: 'center' },
+  page: { ...StyleSheet.absoluteFill, borderRadius: 2, overflow: 'hidden' },
+  frame: { position: 'absolute', width: PAGE_W + 40, height: PAGE_H + 30 },
+  corner: { position: 'absolute', width: 20, height: 20, borderRadius: 3 },
 });

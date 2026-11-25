@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icons';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius, squircle } from '@/design/tokens';
-import { type } from '@/design/type';
+import { sceneType, type } from '@/design/type';
 
 /**
  * Apple-style building blocks shared by every screen: navigation bar, grouped inset lists,
@@ -33,7 +33,7 @@ export function NavBar({ title, back = 'Back', right }: { title?: string; back?:
           </Text>
         </Pressable>
         {title ? (
-          <Text style={[type.headline, styles.navTitle, { color: colors.text }]} numberOfLines={1} accessibilityRole="header">
+          <Text style={[sceneType.barTitle, styles.navTitle, { color: colors.text }]} numberOfLines={1} accessibilityRole="header">
             {title}
           </Text>
         ) : null}
