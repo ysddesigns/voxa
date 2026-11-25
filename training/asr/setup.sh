@@ -11,8 +11,11 @@ ICEFALL_COMMIT=ed16de9534d79252cac51f1729fdcee5699e9758   # icefall master, 18 N
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
-python -c "import torch, k2; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), 'k2', k2.__version__)" \
-  || { echo "Install PyTorch and k2 first (see the top of this file)."; exit 1; }
+# k2's CUDA wheels have __dev_version__ rather than __version__.
+check_torch_k2() {
+  python -c "import torch, k2; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), 'k2', getattr(k2, '__dev_version__', '') or getattr(k2, '__version__', ''))"
+}
+check_torch_k2 || { echo "Install PyTorch and k2 first: python scripts/colab_install.py (or see the top of this file)."; exit 1; }
 
 pip install lhotse sentencepiece sherpa-onnx onnx onnxruntime soundfile tensorboard
 
@@ -22,6 +25,8 @@ fi
 git -C icefall fetch --quiet origin "$ICEFALL_COMMIT"
 git -C icefall checkout --quiet "$ICEFALL_COMMIT"
 pip install -r icefall/requirements.txt
+# If one of those packages pulled in a different torch, put a matching k2 back.
+check_torch_k2 || { python scripts/colab_install.py && check_torch_k2; }
 
 # The recipe: icefall's zipformer files, with our asr_datamodule.py in place of theirs.
 ASR=icefall/egs/librispeech/ASR
