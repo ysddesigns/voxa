@@ -3,7 +3,7 @@ import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LIVE_BAR_SPACE } from '@/components/live-bar';
 import { useTheme } from '@/design/theme';
-import { type } from '@/design/type';
+import { sceneType, type } from '@/design/type';
 import { useListen } from '@/features/listen/listen-session';
 import { useSpeakSession } from '@/features/speak/speak-session';
 
@@ -34,7 +34,7 @@ export function Screen({ title, overline, right, children }: {
     >
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          {overline ? <Text style={[type.overline, { color: colors.textSecondary }]}>{overline}</Text> : null}
+          {overline ? <Text style={[sceneType.overline, { color: colors.textSecondary }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>{overline.toUpperCase()}</Text> : null}
           <Text style={[type.largeTitle, { color: colors.text }]} accessibilityRole="header">
             {title}
           </Text>

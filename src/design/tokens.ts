@@ -1,24 +1,28 @@
 /**
- * Voxa design tokens: Apple's system palette (iOS grouped backgrounds, system greys, labels)
- * with one brand accent. Keep names semantic, never raw hex in screens.
+ * Voxa design tokens. Every screen lives in the same house as the Library's Rack: plaster
+ * walls, paper cards and warm ink by day; the same rooms by lamplight in the evening. The
+ * app palette is taken from the room palette below (rackLight, rackDark), so moving between
+ * a list screen and a drawn room never changes the light. Keep names semantic, never raw hex
+ * in screens.
  *
  * Rules (anti-slop locks):
  * - One accent: Voxa orange, spent on the primary action, active state and progress only.
- * - One grey family: Apple's cool system greys. No warm greys.
+ * - One neutral family: the room's warm plaster, paper and ink. No cool system greys.
+ * - The page is the room's wall, cards are its paper, text is its ink (house.test locks this).
  * - Shape: actions are pills; cards, tiles and sheets 20; grouped lists 12; inputs and icon tiles 10.
  *   Every rounded rectangle uses continuous corners (see `squircle`).
  * - Text passes AA (4.5:1) on every surface it sits on: src/design/__tests__/contrast.test.ts.
  */
 export type Palette = {
-  /** systemGroupedBackground: the page behind cards and grouped lists. */
+  /** The page behind cards and grouped lists: the room's wall. */
   background: string;
-  /** secondarySystemGroupedBackground: cards, grouped rows, sheets. */
+  /** Cards, grouped rows, sheets: paper on the wall. */
   card: string;
   /** Filled controls on a card: chips, segmented controls, gray buttons. */
   chip: string;
   chipPressed: string;
   separator: string;
-  /** label / secondaryLabel / tertiaryLabel, darkened where Apple's fail AA. */
+  /** Ink: primary, secondary and tertiary text. */
   text: string;
   textSecondary: string;
   textTertiary: string;
@@ -41,51 +45,53 @@ export type Palette = {
   art: string;
 };
 
+/** Day: sunlit plaster, paper cards, warm brown ink. */
 export const light: Palette = {
-  background: '#F2F2F7',
-  card: '#FFFFFF',
-  chip: '#E5E5EA',
-  chipPressed: '#D1D1D6',
-  separator: '#C6C6C8',
-  text: '#000000',
-  // Apple's secondaryLabel (#3C3C43 at 60%) is about 3.6:1 on white; this is the AA-safe step.
-  textSecondary: '#55555A',
-  textTertiary: '#55555A',
+  background: '#ECE4D6',
+  card: '#FBF7EE',
+  chip: '#E6DCCB',
+  chipPressed: '#D9CCB6',
+  separator: '#D6C9B3',
+  text: '#2A2118',
+  textSecondary: '#5C4B36',
+  textTertiary: '#5C4B36',
   // Deepened from the canvas orange (#FF5A36, kept for the app icon) so white button text passes AA.
   accent: '#D63F1C',
   accentText: '#A02F0F',
   onAccent: '#FFFFFF',
   accentChip: 'rgba(0,0,0,0.18)',
-  warning: '#FDE3DE',
-  primaryFill: '#000000',
-  onPrimary: '#FFFFFF',
-  waveUnplayed: '#D1D1D6',
-  tabBar: '#F9F9F9',
-  tabActiveFill: '#FDE3DE',
-  shadow: 'rgba(0,0,0,0.12)',
+  warning: '#F7DDD1',
+  // The main action is ink on paper.
+  primaryFill: '#2A2118',
+  onPrimary: '#FBF7EE',
+  waveUnplayed: '#D9CCB6',
+  tabBar: '#F6F0E4',
+  tabActiveFill: '#F7DDD1',
+  shadow: 'rgba(72,52,30,0.16)',
   highlight: '#FFE1D6',
   art: '#F58A84',
 };
 
+/** Evening: the same rooms by lamplight. */
 export const dark: Palette = {
-  background: '#000000',
-  card: '#1C1C1E',
-  chip: '#2C2C2E',
-  chipPressed: '#3A3A3C',
-  separator: '#38383A',
-  text: '#FFFFFF',
-  textSecondary: '#AEAEB2',
-  textTertiary: '#AEAEB2',
+  background: '#231E1A',
+  card: '#2C2621',
+  chip: '#322B25',
+  chipPressed: '#3D352E',
+  separator: '#40382F',
+  text: '#F3EBD9',
+  textSecondary: '#B9AE9A',
+  textTertiary: '#B9AE9A',
   accent: '#D63F1C',
   accentText: '#FF8A6B',
   onAccent: '#FFFFFF',
   accentChip: 'rgba(0,0,0,0.18)',
   warning: '#3A2420',
-  // The main action turns white with black text in dark mode, as in Apple's own apps.
-  primaryFill: '#FFFFFF',
-  onPrimary: '#000000',
-  waveUnplayed: '#3A3A3C',
-  tabBar: '#161618',
+  // The main action turns to paper with dark ink in the evening.
+  primaryFill: '#F3EBD9',
+  onPrimary: '#231E1A',
+  waveUnplayed: '#3A332D',
+  tabBar: '#1E1915',
   tabActiveFill: '#3A2420',
   shadow: 'rgba(0,0,0,0.5)',
   highlight: '#5A2A1E',
