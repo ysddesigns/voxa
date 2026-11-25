@@ -110,7 +110,8 @@ export const Room = memo(function Room({
             <Stop offset="0" stopColor={r.wall} />
             <Stop offset="1" stopColor={r.wallShade} />
           </LinearGradient>
-          <RadialGradient id="roomGlow" cx={lit ? '0.95' : '0.05'} cy="0.15" rx="0.95" ry="0.7" fx={lit ? '0.95' : '0.05'} fy="0.15">
+          {/* By day the window's glow, high on the left; at night the floor lantern's, low on the right. */}
+          <RadialGradient id="roomGlow" cx={lit ? '0.95' : '0.05'} cy={lit ? '0.95' : '0.15'} rx="0.95" ry={lit ? '0.85' : '0.7'} fx={lit ? '0.95' : '0.05'} fy={lit ? '0.95' : '0.15'}>
             <Stop offset="0" stopColor={r.light} stopOpacity={lit ? 0.42 : 0.5} />
             <Stop offset="1" stopColor={r.light} stopOpacity={0} />
           </RadialGradient>

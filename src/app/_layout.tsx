@@ -34,7 +34,6 @@ function Root() {
         <Stack.Screen name="editor" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="engine-lab" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="library-v2" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="phrases" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />

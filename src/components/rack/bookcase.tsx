@@ -23,8 +23,11 @@ export const CASE = {
   base: 28,
 } as const;
 
-/** The floor's least height under the case, above the home indicator (room for the rack dots). */
-export const FLOOR_MIN = 52;
+/**
+ * The floor's least height under the case, above the tab bar: room for the rack dots, and for
+ * the floor vase and lantern to stand in front of the case (see decor).
+ */
+export const FLOOR_MIN = 76;
 
 /** Where a shelf sits against the eye: we see the underside of shelves above it, the top of those below. */
 export type EyeLevel = 'above' | 'level' | 'below';

@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
-import { useFocusEffect, usePreventRemove, useRouter } from 'expo-router';
+import { BackHandler, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Animated, { useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icons';
+import { LIVE_BAR_SPACE } from '@/components/live-bar';
 import { CASE, CaseBase, CaseShelf, CaseTop, eyeLevel, FLOOR_MIN, FloorDots } from '@/components/rack/bookcase';
+import { FloorDecor } from '@/components/rack/decor';
 import { EmptyPocket, PocketView } from '@/components/rack/pocket';
 import type { RackItem } from '@/components/rack/poster';
 import { Room, useRoom, WindowLight } from '@/components/rack/room';
@@ -16,6 +18,7 @@ import { fontFamily } from '@/design/type';
 import { posterTitle } from '@/features/library-rack/labels';
 import { buildPockets, frontMatches, paginate, rackLayout, type Pocket, type RackLayout } from '@/features/library-rack/pockets';
 import { useListen } from '@/features/listen/listen-session';
+import { useSpeakSession } from '@/features/speak/speak-session';
 import { sessionStore } from '@/storage';
 import type { SessionMeta } from '@/storage/sessions';
 
@@ -31,18 +34,25 @@ const matchSession = (m: SessionMeta, q: string) =>
 /** The wall meets the floor this far above the case's bottom, so the case stands on the floor. */
 const FLOOR_OVERLAP = 12;
 
+/** Height of the iOS system tab bar above the home indicator. */
+const IOS_TAB_BAR = 49;
+/** Android's floating Voxa tab pill (see android-tab-bar): height and the gap above it. */
+const ANDROID_TAB_BAR = 64 + 8;
+
 /**
- * Library v2, "The Rack": a white bookcase with an oak top in a sunlit room (lamplit at night),
- * drawn in code. It always fits the screen and grows deeper, not longer: each stack is one day,
- * week or month, newest poster in front, older ones showing behind. Tap a stack to pull it off
- * the shelf; swipe across for older cases. Same data and actions as the Library tab.
+ * The Library tab, "The Rack" (PRD LB-1): everything saved on this phone, as posters on a white
+ * bookcase with an oak top in a sunlit room (lamplit at night), drawn in code. It always fits
+ * the screen and grows deeper, not longer: each stack is one day, week or month, newest poster
+ * in front, older ones showing behind. Tap a stack to pull it off the shelf; swipe across for
+ * older cases. The tab bar floats over the floor, so the case stops above it.
  */
-export default function LibraryRackScreen() {
+export function RackScreen() {
   const { r } = useRoom();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { fontScale } = useWindowDimensions();
   const l = useListen();
+  const speaking = useSpeakSession().status !== 'idle';
   const tier = useDeviceTier();
   const reduceMotion = useReducedMotion();
   const motion = tier !== 'lite' && !reduceMotion;
@@ -59,6 +69,12 @@ export default function LibraryRackScreen() {
 
   const scrollX = useSharedValue(0);
   const pager = useAnimatedRef<Animated.ScrollView>();
+  // What floats over the bottom of the screen: the tab bar, and on Android the Listen or Speak bar.
+  const barBottom =
+    Platform.OS === 'ios'
+      ? insets.bottom + IOS_TAB_BAR
+      : Math.max(insets.bottom, 12) + 8 + ANDROID_TAB_BAR + (l.status !== 'idle' || speaking ? LIVE_BAR_SPACE : 0);
+
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollX.set(e.contentOffset.x);
   });
@@ -89,11 +105,11 @@ export default function LibraryRackScreen() {
   }, [sessions, l.sessionId, l.status, l.title, q]);
 
   const layout = useMemo(() => {
-    const area = root.h - headerH - CASE.top - CASE.base - (FLOOR_MIN + insets.bottom);
+    const area = root.h - headerH - CASE.top - CASE.base - (FLOOR_MIN + barBottom);
     if (root.w <= 0 || headerH <= 0 || area <= 0) return null;
     const inner = root.w - 2 * (CASE.margin + CASE.side + CASE.inset);
     return rackLayout({ width: inner, height: area, fontScale, gap: CASE.gap });
-  }, [root, headerH, insets.bottom, fontScale]);
+  }, [root, headerH, barBottom, fontScale]);
 
   const caseH = layout ? CASE.top + layout.rows * layout.shelfH + CASE.base : 0;
   const caseBottom = headerH + caseH;
@@ -131,8 +147,18 @@ export default function LibraryRackScreen() {
   const shownPocket = viewer ? pockets.find((p) => p.key === viewer.key) : undefined;
   const closeViewer = useCallback(() => setViewer((v) => (v ? { ...v, closing: true } : v)), []);
   const clearViewer = useCallback(() => setViewer(null), []);
-  // The open stack takes the first back (button, edge swipe or Android back); the next leaves.
-  usePreventRemove(!!shownPocket, closeViewer);
+  // An open stack takes Android's back; the next back does what it does on any tab.
+  const viewerOpen = !!shownPocket;
+  useFocusEffect(
+    useCallback(() => {
+      if (!viewerOpen) return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        closeViewer();
+        return true;
+      });
+      return () => sub.remove();
+    }, [viewerOpen, closeViewer]),
+  );
 
   const goTo = (i: number) => {
     const next = Math.max(0, Math.min(racks.length - 1, i));
@@ -157,16 +183,6 @@ export default function LibraryRackScreen() {
 
       <View style={{ flex: 1 }} importantForAccessibility={shownPocket ? 'no-hide-descendants' : 'auto'}>
         <View style={[styles.header, { paddingTop: insets.top + 8 }]} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Library"
-            hitSlop={6}
-            style={({ pressed }) => [styles.round, { borderColor: r.control, opacity: pressed ? 0.5 : 1 }]}
-          >
-            <Icon name="chevronLeft" size={22} color={r.title} strokeWidth={2.2} />
-          </Pressable>
-
           <View style={styles.middle}>
             {searching ? (
               <View style={[styles.search, { borderColor: r.control }]}>
@@ -190,10 +206,10 @@ export default function LibraryRackScreen() {
             ) : (
               <>
                 <Text style={[styles.overline, { color: r.overline }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-                  {savedCount ? `LIBRARY · ${savedCount} SAVED` : 'LIBRARY / ON THIS PHONE'}
+                  {savedCount ? `THE RACK · ${savedCount} SAVED` : 'THE RACK · ON THIS PHONE'}
                 </Text>
                 <Text style={[styles.title, { color: r.title }]} accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                  The Rack
+                  Library
                 </Text>
               </>
             )}
@@ -202,7 +218,7 @@ export default function LibraryRackScreen() {
           <Pressable
             onPress={toggleSearch}
             accessibilityRole="button"
-            accessibilityLabel={searching ? 'Close search' : 'Search the rack'}
+            accessibilityLabel={searching ? 'Close search' : 'Search the library'}
             hitSlop={6}
             style={({ pressed }) => [styles.round, { borderColor: r.control, opacity: pressed ? 0.5 : 1 }]}
           >
@@ -269,7 +285,7 @@ export default function LibraryRackScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.floor, { paddingBottom: insets.bottom, minHeight: FLOOR_MIN + insets.bottom }]}>
+        <View style={[styles.floor, { paddingBottom: barBottom, minHeight: FLOOR_MIN + barBottom }]}>
           {racks.length > 1 ? (
             <View
               accessible
@@ -285,6 +301,9 @@ export default function LibraryRackScreen() {
         </View>
       </View>
 
+      {/* The floor vase and lantern stand in front of the case, over its plinth. */}
+      {layout ? <FloorDecor bottom={barBottom + 2} rich={rich} /> : null}
+
       {shownPocket && viewer && root.w > 0 ? (
         <StackViewer
           title={shownPocket.spoken}
@@ -292,7 +311,7 @@ export default function LibraryRackScreen() {
           width={root.w}
           height={root.h}
           topInset={insets.top}
-          bottomInset={insets.bottom}
+          bottomInset={barBottom}
           motion={motion}
           rich={rich}
           closing={viewer.closing}
