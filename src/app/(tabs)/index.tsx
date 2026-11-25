@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/icons';
 import { Screen } from '@/components/screen';
 import { Group, ListRow, TextRow } from '@/components/ui';
+import { LiveBar, SpeakBar } from '@/components/live-bar';
 import { Waveform } from '@/components/waveform';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius, squircle } from '@/design/tokens';
@@ -46,8 +47,10 @@ export default function Home() {
   const now = new Date();
   const overline = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  // Wait for prefs before drawing anything, so a first-run user never glimpses Home before Welcome.
+  if (!loaded) return null;
   // First run: setup before anything else.
-  if (loaded && !prefs.onboarded) return <Redirect href="/welcome" />;
+  if (!prefs.onboarded) return <Redirect href="/welcome" />;
 
   return (
     <Screen
@@ -60,40 +63,43 @@ export default function Home() {
           onPress={() => router.push('/settings')}
           style={[styles.avatar, { backgroundColor: colors.chip }]}
         >
-          <Icon name="person" color={colors.text} />
+          <Icon name="settings" color={colors.text} />
         </Pressable>
       }
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Type something to say"
-        onPress={() => router.push('/editor')}
-        style={[styles.hero, { backgroundColor: colors.accent }]}
-      >
-        <Text style={[type.title, { color: colors.onAccent }]}>What do you want to say?</Text>
-        <View style={styles.heroWave}>
-          <Waveform bars={34} maxHeight={56} color="rgba(255,255,255,0.9)" breathe />
+      {/* iOS has no bar above its native tabs, so a running session leads Home instead. Android
+          already floats these bars above its tab bar on every tab. */}
+      {process.env.EXPO_OS === 'ios' ? (
+        <>
+          <LiveBar onOpen={() => router.navigate('/live')} />
+          <SpeakBar onOpen={() => router.push('/player')} />
+        </>
+      ) : null}
+
+      {/* A plain card holding three real buttons. It is not a button itself: a pressable card
+          with buttons inside reads as one element to VoiceOver, hiding Scan and Files. */}
+      <View style={[styles.hero, { backgroundColor: colors.accent }]}>
+        <Text style={[type.title, { color: colors.onAccent }]} accessibilityRole="header">
+          What do you want to say?
+        </Text>
+        <View style={styles.heroWave} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Waveform bars={34} maxHeight={56} color="rgba(255,255,255,0.9)" />
         </View>
         <View style={styles.heroRow}>
-          {(['Paste', 'Scan', 'Files'] as const).map((label) => (
-            <Pressable
-              key={label}
-              accessibilityRole="button"
-              accessibilityLabel={label === 'Scan' ? 'Scan text with the camera' : label === 'Files' ? 'Open a text, Word or PDF file' : label}
-              onPress={() =>
-                label === 'Scan' ? router.push('/scan') : label === 'Files' ? router.push({ pathname: '/editor', params: { open: 'file' } }) : router.push('/editor')
-              }
-              style={[styles.heroChip, { backgroundColor: 'rgba(255,255,255,0.22)' }]}
-            >
-              <Text style={[type.callout, { color: colors.onAccent }]}>{label}</Text>
-            </Pressable>
-          ))}
-          <View style={{ flex: 1 }} />
-          <View style={[styles.plus, { backgroundColor: colors.primaryFill }]}>
-            <Icon name="plus" color={colors.onPrimary} />
-          </View>
+          <HeroButton
+            label="Type"
+            a11y="Type something to say"
+            primary
+            onPress={() => router.push('/editor')}
+          />
+          <HeroButton label="Scan" a11y="Scan text with the camera" onPress={() => router.push('/scan')} />
+          <HeroButton
+            label="Files"
+            a11y="Open a text, Word or PDF file"
+            onPress={() => router.push({ pathname: '/editor', params: { open: 'file' } })}
+          />
         </View>
-      </Pressable>
+      </View>
 
       <View style={styles.tiles}>
         <Tile icon="chat" title="Speak for me" sub="Phrases, type and play" onPress={() => router.push('/phrases')} />
@@ -124,6 +130,25 @@ export default function Home() {
   );
 }
 
+/** A button on the accent card: Type is the solid one, the others a darker wash. */
+function HeroButton({ label, a11y, primary, onPress }: { label: string; a11y: string; primary?: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.heroChip,
+        primary && styles.heroPrimary,
+        { backgroundColor: primary ? colors.onAccent : colors.accentChip, opacity: pressed ? 0.75 : 1 },
+      ]}
+    >
+      <Text style={[primary ? type.headline : type.callout, { color: primary ? colors.accent : colors.onAccent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function Tile({ icon, title, sub, onPress }: { icon: IconName; title: string; sub: string; onPress: () => void }) {
   const { colors } = useTheme();
   return (
@@ -147,8 +172,8 @@ const styles = StyleSheet.create({
   hero: { borderRadius: radius.hero, ...squircle, padding: 20, gap: 16 },
   heroWave: { height: 60, justifyContent: 'center' },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  heroChip: { borderRadius: radius.chip, paddingHorizontal: 14, minHeight: minTouch, justifyContent: 'center' },
-  plus: { width: minTouch + 4, height: minTouch + 4, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  heroChip: { borderRadius: radius.chip, paddingHorizontal: 16, minHeight: minTouch, justifyContent: 'center', alignItems: 'center' },
+  heroPrimary: { flex: 1 },
   tiles: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1, borderRadius: radius.tile, ...squircle, padding: 16, gap: 4 },
   tileIcon: { width: 40, height: 40, borderRadius: radius.icon, ...squircle, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },

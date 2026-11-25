@@ -50,6 +50,12 @@ describe.each([
   it.each(marks)('%s marks on %s are at least 3:1', (fg, bg) => {
     expect(contrast(p[fg], p[bg])).toBeGreaterThanOrEqual(3);
   });
+  it('onAccent on an accentChip over the accent is at least 4.5:1', () => {
+    expect(contrast(p.onAccent, over(p.accentChip, p.accent))).toBeGreaterThanOrEqual(4.5);
+  });
+  it('accent text on an onAccent button is at least 4.5:1', () => {
+    expect(contrast(p.accent, p.onAccent)).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 describe.each([

@@ -25,6 +25,8 @@ export type Palette = {
   accent: string;
   accentText: string;
   onAccent: string;
+  /** Secondary buttons on an accent surface: a darker wash, so onAccent text keeps AA. */
+  accentChip: string;
   /** Tinted background for notices (accent at low strength). */
   warning: string;
   primaryFill: string;
@@ -53,6 +55,7 @@ export const light: Palette = {
   accent: '#D63F1C',
   accentText: '#A02F0F',
   onAccent: '#FFFFFF',
+  accentChip: 'rgba(0,0,0,0.18)',
   warning: '#FDE3DE',
   primaryFill: '#000000',
   onPrimary: '#FFFFFF',
@@ -76,6 +79,7 @@ export const dark: Palette = {
   accent: '#D63F1C',
   accentText: '#FF8A6B',
   onAccent: '#FFFFFF',
+  accentChip: 'rgba(0,0,0,0.18)',
   warning: '#3A2420',
   // The main action turns white with black text in dark mode, as in Apple's own apps.
   primaryFill: '#FFFFFF',

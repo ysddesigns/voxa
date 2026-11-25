@@ -47,9 +47,13 @@ function Ready() {
     if (listenReady) speech.warmUp?.();
   }, [listenReady, speech]);
 
-  useEffect(() => {
+  // Re-read which models are on the phone once the listening model finishes loading (during
+  // render, not in an effect, so it lands in the same pass).
+  const [statusFor, setStatusFor] = useState(listenReady);
+  if (statusFor !== listenReady) {
+    setStatusFor(listenReady);
     setModelState(VoxaEngine?.modelStatus?.() ?? null);
-  }, [listenReady]);
+  }
 
   const toggleModel = () => {
     if (!VoxaEngine?.setListenTuning) return;
@@ -105,7 +109,7 @@ function Ready() {
                   backgroundColor: colors.chip,
                   paddingHorizontal: 12,
                   paddingVertical: 10,
-                  borderRadius: radius.md,
+                  borderRadius: radius.group,
                 }}
               >
                 <View style={{ gap: 2, flex: 1 }}>
