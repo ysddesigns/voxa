@@ -10,6 +10,7 @@ is what decides how long training takes.
   python scripts/fetch_data.py naijavoices --language ha --hours 60 --out /content/data/fetched
   python scripts/fetch_data.py afrispeech --accents hausa,hausa-fulani,fulani,kanuri --hours 40 --out /content/data/fetched
   python scripts/fetch_data.py pidgin --out /content/data/fetched
+  python scripts/fetch_data.py openslr70 --out /content/data/fetched
   python scripts/fetch_data.py fleurs --code ha_ng --out /content/data/fleurs
 
 Gated datasets (NaijaVoices, AfriSpeech-200) need you to accept their terms on the Hugging Face
@@ -37,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from voxa_asr.fetch import PATH_COLUMNS, SPEAKER_COLUMNS, TEXT_COLUMNS, Output, decode, pick  # noqa: E402
 
 from huggingface_hub import HfApi, hf_hub_download  # noqa: E402
+from huggingface_hub.errors import GatedRepoError  # noqa: E402
 
 NAIJAVOICES = "naijavoices/naijavoices-dataset"
 AFRISPEECH = "intronhealth/afrispeech-200"
@@ -212,6 +214,72 @@ def cmd_afrispeech(a) -> None:
     report(out, stats)
 
 
+# --- OpenSLR 70: Google's crowdsourced Nigerian English (CC BY-SA 4.0, not gated) ----------------
+
+SLR70_MIRRORS = ("https://openslr.trmal.net", "https://openslr.elda.org", "https://openslr.magicdatatech.com")
+
+
+def fetch_url(path: str, into: Path) -> Path:
+    """resources/70/<name> from the first OpenSLR mirror that answers, streamed to disk."""
+    import urllib.request
+
+    target = into / Path(path).name
+    last: Exception | None = None
+    for mirror in SLR70_MIRRORS:
+        try:
+            req = urllib.request.Request(f"{mirror}/{path}", headers={"User-Agent": "voxa-training"})
+            with urllib.request.urlopen(req, timeout=120) as r, target.open("wb") as f:
+                shutil.copyfileobj(r, f, length=1 << 20)
+            return target
+        except Exception as e:  # noqa: BLE001 - try the next mirror
+            print(f"  {mirror}: {type(e).__name__}: {e}")
+            last = e
+    raise RuntimeError(f"no OpenSLR mirror served {path}") from last
+
+
+def cmd_openslr70(a) -> None:
+    """Nigerian English read by volunteers in Lagos and London: a wav zip and a tsv (FileID, text) per gender."""
+    import zipfile
+
+    out = Output(a.out, "openslr70-en-ng", "en", a.hours)
+    genders = ("female", "male")
+    share = a.hours * 3600 / len(genders) if a.hours else None
+    stats: Counter = Counter()
+    for gender in genders:
+        if out.is_done(gender):
+            continue
+        start = out.train_sec
+        with tempfile.TemporaryDirectory(dir=a.out) as tmp:
+            tmp = Path(tmp)
+            texts = {}
+            for line in fetch_url(f"resources/70/line_index_{gender}.tsv", tmp).read_text(encoding="utf-8").splitlines():
+                cols = line.split("\t")
+                if len(cols) >= 2:
+                    texts[cols[0].strip()] = cols[-1].replace('\\"', '"').strip()  # the tsv writes quotes as \"
+            print(f"{gender}: {len(texts)} transcripts; downloading the audio (about {'760' if gender == 'female' else '450'} MB)")
+            matched = 0
+            with zipfile.ZipFile(fetch_url(f"resources/70/en_ng_{gender}.zip", tmp)) as z:
+                for info in z.infolist():
+                    stem = Path(info.filename).stem
+                    if not info.filename.endswith(".wav") or stem not in texts:
+                        continue
+                    matched += 1
+                    if share and out.train_sec - start >= share:
+                        break
+                    try:
+                        samples, rate = decode(z.read(info))
+                    except Exception:  # noqa: BLE001
+                        stats["unreadable audio"] += 1
+                        continue
+                    # FileIDs look like ngf_00295_00053165: the speaker is the first two parts.
+                    speaker = "_".join(stem.split("_")[:2])
+                    stats[out.add(stem, samples, rate, texts[stem], f"slr70-{speaker}")] += 1
+            if not matched and texts:
+                sys.exit(f"{gender}: none of the wav names matched the tsv FileIDs (first FileID: {next(iter(texts))!r})")
+        out.mark_done(gender)
+    report(out, stats)
+
+
 # --- FLEURS: the folder layout voxa_asr/sources.py reads -----------------------------------------
 
 
@@ -244,14 +312,23 @@ def main() -> None:
     af = sub.add_parser("afrispeech", help="Nigerian-accented English from AfriSpeech-200 (gated)")
     af.add_argument("--accents", default=NORTH_ACCENTS, help=f"north, south, or comma-separated accents. North: {NORTH_ACCENTS}. South: {SOUTH_ACCENTS}")
     sub.add_parser("pidgin", help="Nigerian Pidgin from Pidgin ASR Combined (about 9 h)")
+    sub.add_parser("openslr70", help="Nigerian English from OpenSLR 70 (Google, CC BY-SA 4.0, not gated)")
     fl = sub.add_parser("fleurs", help="a FLEURS language folder, e.g. ha_ng")
     fl.add_argument("--code", required=True)
-    for s in (nv, af, sub.choices["pidgin"], fl):
+    for s in (nv, af, sub.choices["pidgin"], sub.choices["openslr70"], fl):
         s.add_argument("--out", type=Path, required=True)
         s.add_argument("--hours", type=float, default=None, help="cap on training audio (default: everything)")
+        s.add_argument("--skip-if-no-access", action="store_true", help="for a gated dataset not yet approved: warn and carry on instead of failing")
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
-    {"naijavoices": cmd_naijavoices, "afrispeech": cmd_afrispeech, "pidgin": cmd_pidgin, "fleurs": cmd_fleurs}[a.cmd](a)
+    commands = {"naijavoices": cmd_naijavoices, "afrispeech": cmd_afrispeech, "pidgin": cmd_pidgin, "openslr70": cmd_openslr70, "fleurs": cmd_fleurs}
+    try:
+        commands[a.cmd](a)
+    except GatedRepoError:
+        if not a.skip_if_no_access:
+            raise
+        print(f"SKIPPED {a.cmd}: your Hugging Face account is not approved for it yet. Training goes on without it;")
+        print("once you are approved, run this step again and the new data is used from the next run.")
 
 
 if __name__ == "__main__":

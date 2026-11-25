@@ -9,8 +9,11 @@ run the cells from top to bottom. The notebook explains each step. In short, it:
    starting models (`setup.sh`).
 2. Downloads the data from Hugging Face one file at a time, as 16 kHz audio, capped at the hours
    you choose (`scripts/fetch_data.py`):
-   - North: NaijaVoices Hausa, FLEURS Hausa, AfriSpeech-200 English with northern accents, Pidgin
-   - South: AfriSpeech-200 English with southern accents, Pidgin
+   - North: NaijaVoices Hausa, FLEURS Hausa, Nigerian English (OpenSLR 70, and AfriSpeech-200 with
+     northern accents), Pidgin
+   - South: Nigerian English (OpenSLR 70, and AfriSpeech-200 with southern accents), Pidgin
+
+   AfriSpeech-200 is skipped with a message until Hugging Face approves your access.
 3. Adds your own recordings from Google Drive: Donate zips, transcribed meetings, `test-speakers.txt`.
 4. Prepares the data, then trains stage A (English and Pidgin) and stage B (the region model).
 5. Exports two packs, `listen-ng-<region>` (live captions) and `listen-ng-<region>-full` (after the
@@ -20,7 +23,8 @@ Checkpoints, the speaker lock, the word-piece vocabulary, packs and scores live 
 After a disconnect, run the cells again from the top: finished steps and epochs are skipped.
 
 You need a Hugging Face token, and must accept the terms of NaijaVoices and AfriSpeech-200 on their
-pages. Both are non-commercial (CC BY-NC-SA).
+pages. Both are non-commercial (CC BY-NC-SA). OpenSLR 70 (CC BY-SA 4.0) and Pidgin ASR Combined
+(CC BY 4.0) need no approval.
 
 ## Any other GPU machine (RunPod, Lambda, your own)
 
@@ -31,7 +35,8 @@ python scripts/colab_install.py          # k2 to match the installed PyTorch
 bash setup.sh && source env.sh
 export HF_TOKEN=...                      # after accepting the datasets' terms
 python scripts/fetch_data.py pidgin --out /workspace/data/fetched
-python scripts/fetch_data.py afrispeech --accents north --hours 40 --out /workspace/data/fetched
+python scripts/fetch_data.py openslr70 --out /workspace/data/fetched   # not gated
+python scripts/fetch_data.py afrispeech --accents north --hours 40 --skip-if-no-access --out /workspace/data/fetched
 python scripts/fetch_data.py naijavoices --language ha --hours 60 --out /workspace/data/fetched
 python scripts/fetch_data.py fleurs --code ha_ng --out /workspace/data/fleurs
 REGION=north MODEL_SIZE=small DATA_DIR=/workspace/data KEEP_EPOCHS=4 bash scripts/train_cloud.sh
