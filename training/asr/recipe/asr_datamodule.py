@@ -53,6 +53,18 @@ def _upper(sup):
     return fastcopy(sup, text=sup.text.upper())
 
 
+# training/asr: scripts/05_compute_fbank.py ran there, and older manifests store feature paths
+# relative to it. finetune.py runs from icefall's folder, where those paths do not exist.
+_HERE = Path(__file__).resolve().parent.parent
+
+
+def _absolute_features(cut):
+    f = cut.features
+    if f is not None and not Path(f.storage_path).is_absolute():
+        cut = fastcopy(cut, features=fastcopy(f, storage_path=str(_HERE / f.storage_path)))
+    return cut
+
+
 class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser):
@@ -72,7 +84,7 @@ class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
         path = self._path(split, lang)
         if not path.is_file():
             raise FileNotFoundError(f"{path} not found: run scripts 02 and 05 for {lang}")
-        cuts = load_manifest_lazy(path)
+        cuts = load_manifest_lazy(path).map(_absolute_features)
         return cuts.map_supervisions(_upper) if self.args.voxa_upper else cuts
 
     def _count(self, split: str, lang: str) -> int:

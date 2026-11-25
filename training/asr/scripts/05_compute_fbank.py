@@ -46,7 +46,8 @@ def main() -> None:
         stem = path.name.removesuffix(".jsonl.gz")
         cuts = cuts.compute_and_store_features(
             extractor=extractor,
-            storage_path=str(a.out / f"{stem}_feats"),
+            # Absolute: training reads these from icefall's folder, not from here.
+            storage_path=str((a.out / f"{stem}_feats").resolve()),
             num_jobs=a.jobs,
             storage_type=LilcomChunkyWriter,
         )
