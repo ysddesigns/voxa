@@ -53,6 +53,11 @@ case "$STAGE" in
       --voxa-languages en,pcm --voxa-upper 1
       --base-lr "${BASE_LR:-0.0045}"
     )
+    # The small starting checkpoint has a CTC head; without CTC the model has no place for it, so load
+    # every other part by name (a whole-model load would stop at the extra keys).
+    if [ "$SIZE" = small ] && [ "$USE_CTC" = 0 ]; then
+      STAGE_ARGS+=(--init-modules encoder_embed,encoder,decoder,joiner,simple_am_proj,simple_lm_proj)
+    fi
     ;;
   south)
     # Pidgin is spelt with English letters and mostly English words: the English vocabulary covers it,
