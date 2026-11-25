@@ -30,16 +30,30 @@ check_torch_k2 || { python scripts/colab_install.py && check_torch_k2; }
 # lhotse stores features with lilcom, which it does not install itself.
 python -c "import lilcom" || { echo "lilcom did not install: pip install lilcom"; exit 1; }
 
-# The recipe: icefall's zipformer files, with our asr_datamodule.py in place of theirs.
+# The recipe: icefall's zipformer files, with our asr_datamodule.py in place of theirs. The files are
+# copied, not linked: Python follows a linked script back to zipformer/ and would import icefall's
+# asr_datamodule.py from there instead of ours. (-L copies what icefall's own links point at.)
 ASR=icefall/egs/librispeech/ASR
 rm -rf "$ASR/voxa_zipformer"
 mkdir "$ASR/voxa_zipformer"
 for f in "$ASR"/zipformer/*; do
   name="$(basename "$f")"
   [ "$name" = asr_datamodule.py ] && continue
-  ln -s "../zipformer/$name" "$ASR/voxa_zipformer/$name"
+  [ "$name" = __pycache__ ] && continue
+  if [ -d "$f" ]; then
+    ln -s "../zipformer/$name" "$ASR/voxa_zipformer/$name"
+  else
+    cp -L "$f" "$ASR/voxa_zipformer/$name"
+  fi
 done
 ln -s "$HERE/recipe/asr_datamodule.py" "$ASR/voxa_zipformer/asr_datamodule.py"
+# Check: finetune.py must offer our --voxa-* options, which only our asr_datamodule.py adds.
+HELP="$(cd "$ASR" && PYTHONPATH="$HERE/icefall:$HERE:${PYTHONPATH:-}" ICEFALL_ASR_DIR="$HERE/$ASR" python voxa_zipformer/finetune.py --help 2>&1 || true)"
+if ! grep -q -- "--voxa-languages" <<< "$HELP"; then
+  echo "voxa_zipformer/finetune.py does not load recipe/asr_datamodule.py:"
+  tail -20 <<< "$HELP"
+  exit 1
+fi
 
 cat > env.sh <<EOF
 # source env.sh in every new shell before running the scripts
