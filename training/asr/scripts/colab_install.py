@@ -17,6 +17,7 @@ Then it checks that torch and k2 import together, with the GPU visible.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -81,22 +82,29 @@ def install_torch(version: str, cuda: str) -> bool:
     return pip(f"torch=={version}+{cu}", "--index-url", f"https://download.pytorch.org/whl/{cu}")
 
 
+def pinned(version: str, want: str) -> bool:
+    """TORCH=2.8 matches 2.8.x; TORCH=2.8.0 matches only 2.8.0."""
+    return not want or version.split("+")[0] == want or version.startswith(want + ".")
+
+
 def main() -> None:
     py = f"cp{sys.version_info.major}{sys.version_info.minor}"
-    if works():
+    # TORCH=2.8 (environment) asks for that torch, e.g. when a newer one trains badly with icefall.
+    want = os.environ.get("TORCH", "").strip()
+    have = installed_torch()
+    if (have is None or pinned(have[0], want)) and works():
         print("torch and k2 already work together; nothing to do.")
         return
     html = urllib.request.urlopen(INDEX, timeout=60).read().decode("utf-8", errors="replace")
-    wheels = k2_wheels(html, py)
+    wheels = [w for w in k2_wheels(html, py) if pinned(w["torch"], want)]
     if not wheels:
-        sys.exit(f"No k2 CUDA wheels for Python {py} at {INDEX}")
+        sys.exit(f"No k2 CUDA wheels for Python {py}{' and torch ' + want if want else ''} at {INDEX}")
     pip("graphviz")  # k2's one other dependency, since k2 itself goes in with --no-deps
 
-    have = installed_torch()
     have_cuda = have[1] if have else ""
     if have:
-        print(f"Installed: torch {have[0]}, CUDA {have_cuda or 'none'}; Python {py}")
-        w = k2_for(wheels, *have) if have_cuda else None
+        print(f"Installed: torch {have[0]}, CUDA {have_cuda or 'none'}; Python {py}" + (f"; asked for torch {want}" if want else ""))
+        w = k2_for(wheels, *have) if have_cuda and pinned(have[0], want) else None
         if w and install_k2(w) and works():
             return
         print("No working k2 build for this torch; installing a torch that has one.")
