@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/icons';
 import { Screen } from '@/components/screen';
 import { Group, SearchField } from '@/components/ui';
-import { DownloadRing, VoiceAvatar } from '@/components/voice-avatar';
+import { VoiceShelf } from '@/components/voice-shelf';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -72,32 +72,23 @@ export default function VoicesScreen() {
       )}
 
       {more.length > 0 && (
-        <Group header="Get more voices">
-          {more.map((v) => {
-            const p = downloads[v.id];
-            const busy = p !== undefined;
-            return (
-              <View key={v.id} style={styles.row}>
-                <VoiceAvatar name={v.name} size={40} solid={false} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={[type.body, { color: colors.text }]}>{v.name}</Text>
-                  <Text style={[type.footnote, { color: colors.textSecondary }]}>
-                    {busy ? `${v.tags.join(' · ')} · ${Math.round(p * v.sizeMB)} of ${v.sizeMB} MB` : voiceSubtitle(v, true)}
-                  </Text>
-                  {!busy && downloadErrors[v.id] && <Text style={[type.footnote, { color: colors.accentText }]}>{downloadErrors[v.id]}</Text>}
-                </View>
-                <Pressable
-                  onPress={() => (busy ? cancelDownload(v.id) : download(v.id))}
-                  accessibilityRole="button"
-                  accessibilityLabel={busy ? `Cancel ${v.name} download, ${Math.round(p * 100)} percent` : `Download ${v.name}, ${v.sizeMB} MB`}
-                  style={styles.iconButton}
-                >
-                  {busy ? <DownloadRing progress={p} /> : <Icon name="download" size={26} color={colors.text} />}
-                </Pressable>
-              </View>
-            );
-          })}
-        </Group>
+        <View style={{ gap: 7 }}>
+          <Text style={[type.overline, styles.head, { color: colors.textSecondary }]} accessibilityRole="header">
+            Get more voices
+          </Text>
+          {/* The shop window: voices to download, as record sleeves on a ledge. */}
+          <View style={{ marginHorizontal: -16 }}>
+            <VoiceShelf voices={more} downloads={downloads} onDownload={download} onCancel={cancelDownload} />
+          </View>
+          {more
+            .filter((v) => downloads[v.id] === undefined && downloadErrors[v.id])
+            .map((v) => (
+              <Text key={v.id} style={[type.footnote, styles.head, { color: colors.accentText }]} accessibilityLiveRegion="polite">
+                {v.name}: {downloadErrors[v.id]}
+              </Text>
+            ))}
+          <Text style={[type.footnote, styles.head, { color: colors.textSecondary }]}>Tap a voice to download it. Tap again to stop.</Text>
+        </View>
       )}
 
       {shown.length === 0 && (
@@ -144,6 +135,7 @@ function InstalledRow({ voice }: { voice: Voice }) {
 }
 
 const styles = StyleSheet.create({
+  head: { paddingHorizontal: 16 },
   filters: { gap: 8, paddingHorizontal: 16 },
   filter: { minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, justifyContent: 'center' },
   play: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },

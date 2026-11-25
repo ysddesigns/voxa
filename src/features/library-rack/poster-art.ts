@@ -216,3 +216,53 @@ export function posterScene(meta: SessionMeta): PosterScene {
 export function textScene(text: string): PageScene {
   return page(text, seeded(hashId(text.trim() || 'voxa')));
 }
+
+/** A voice's tone sets how its sound wave rolls: low and slow for deep, quick for bright. */
+const TONE_WAVES: Record<string, number> = { Deep: 1.2, Calm: 1.5, Warm: 2, Natural: 2.5, Bright: 3.5 };
+/** And the light it is heard in. */
+const TONE_TIME: Record<string, TimeOfDay> = { Deep: 'night', Calm: 'dusk', Warm: 'dusk', Natural: 'day', Bright: 'dawn' };
+
+/** How many waves cross a voice's sleeve: from its first tone tag, else 2. */
+export function voiceWaves(tags: string[]): number {
+  for (const t of tags) if (TONE_WAVES[t]) return TONE_WAVES[t];
+  return 2;
+}
+
+/**
+ * A voice's record sleeve, for the Voices shop window: its sound as rolling hills. The tone
+ * sets how quickly the waves roll and the time of day; the rest comes from the voice's id, so
+ * a voice always has the same sleeve. Drawn by the same PosterArt as a session's poster.
+ */
+export function voiceScene(voice: { id: string; tags: string[] }): LandscapeScene {
+  const rand = seeded(hashId(`voice:${voice.id}`));
+  const tone = voice.tags.find((t) => TONE_TIME[t]);
+  const time: TimeOfDay = tone ? TONE_TIME[tone] : 'day';
+  const mood = pick(rand, MOODS[time]);
+  const night = time === 'night';
+  const waves = voiceWaves(voice.tags);
+  const colors = mood.hills.slice(1);
+  const hills = colors.map((color, i) => {
+    const base = 62 + i * 11;
+    const amp = 9 - i * 2;
+    const phase = rand() * Math.PI * 2;
+    let d = 'M0,100';
+    for (let x = 0; x <= 100; x += 2.5) {
+      const y = base - amp * (0.5 + 0.5 * Math.sin((2 * Math.PI * waves * x) / 100 + phase));
+      d += ` L${r1(x)},${r1(y)}`;
+    }
+    return { d: `${d} L100,100 Z`, color };
+  });
+  return {
+    kind: 'landscape',
+    time,
+    sky: mood.sky,
+    sun: { x: r1(20 + rand() * 60), y: r1(night ? 20 : 26 + rand() * 10), r: night ? 7 : 10, color: mood.sun, moon: night },
+    stars: night ? Array.from({ length: 7 }, () => ({ x: r1(rand() * 100), y: r1(rand() * 40), r: r1(0.5 + rand() * 0.6) })) : [],
+    hills,
+    lake: null,
+    flags: [],
+    flagColor: '#D63F1C',
+    band: BANDS[pick(rand, mood.band)],
+  };
+}
+
