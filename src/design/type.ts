@@ -13,6 +13,11 @@ export const fontFamily = {
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
   heavy: 'Inter_800ExtraBold',
+  /**
+   * Serif for Library v2's title and poster titles only. Noto Serif Display covers Yoruba,
+   * Igbo and Hausa (ẹ ọ ṣ ɓ ɗ ƙ, tone marks, combining dot below); Fraunces did not.
+   */
+  display: 'NotoSerifDisplay_600SemiBold',
 } as const;
 
 type Variant =

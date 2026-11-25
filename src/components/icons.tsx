@@ -32,7 +32,8 @@ export type IconName =
   | 'trash'
   | 'scan'
   | 'settings'
-  | 'close';
+  | 'close'
+  | 'rack';
 
 type Props = {
   name: IconName;
@@ -100,6 +101,13 @@ export function Icon({ name, size = 22, color, strokeWidth = 2, filled = false, 
         <>
           <Path d="M3 8.5a13 13 0 0 1 18 0M6 12a8.5 8.5 0 0 1 12 0M9 15.5a4 4 0 0 1 6 0" {...common} />
           <Path d="M4 4l16 16" {...common} />
+        </>
+      )}
+      {name === 'rack' && (
+        <>
+          <Path d="M4 3v18M20 3v18M4 10h16M4 17h16" {...common} />
+          <Rect x={6.5} y={5} width={4} height={5} rx={0.8} {...common} />
+          <Rect x={13.5} y={12} width={4} height={5} rx={0.8} {...common} />
         </>
       )}
       {name === 'chevronLeft' && <Path d="M15 5l-7 7 7 7" {...common} />}

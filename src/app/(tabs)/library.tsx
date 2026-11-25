@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Text } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Icon } from '@/components/icons';
 import { Screen } from '@/components/screen';
 import { Button, Card, Group, ListRow, SearchField } from '@/components/ui';
 import { useTheme } from '@/design/theme';
-import { type } from '@/design/type';
+import { minTouch, radius, squircle } from '@/design/tokens';
+import { fontFamily, type } from '@/design/type';
 import { formatDay, formatDuration } from '@/features/listen/format';
 import { useListen } from '@/features/listen/listen-session';
 import { sessionStore } from '@/storage';
@@ -37,7 +39,22 @@ export default function LibraryScreen() {
   }, [sessions, query, l.sessionId]);
 
   return (
-    <Screen title="Library">
+    <Screen
+      title="Library"
+      right={
+        <Pressable
+          onPress={() => router.push('/library-v2')}
+          accessibilityRole="button"
+          accessibilityLabel="Rack view"
+          accessibilityHint="Shows your saved sessions as posters on a rack"
+          hitSlop={6}
+          style={({ pressed }) => [styles.rackButton, { backgroundColor: colors.chip, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="rack" size={17} color={colors.text} />
+          <Text style={[type.subheadline, { color: colors.text, fontFamily: fontFamily.semibold }]}>Rack</Text>
+        </Pressable>
+      }
+    >
       <SearchField value={query} onChangeText={setQuery} placeholder="Search" label="Search saved sessions" />
 
       {l.status !== 'idle' ? (
@@ -62,10 +79,7 @@ export default function LibraryScreen() {
               icon={s.kind === 'scan' ? 'scan' : 'live'}
               title={s.title}
               subtitle={metaLine(s)}
-              onPress={(e?: any) => {
-                console.log('DBGNAV lib-press', Date.now(), e?.nativeEvent?.timestamp, e?.nativeEvent?.pageY, e?.type);
-                router.push({ pathname: '/session/[id]', params: { id: s.id } });
-              }}
+              onPress={() => router.push({ pathname: '/session/[id]', params: { id: s.id } })}
             />
           ))}
         </Group>
@@ -83,3 +97,16 @@ function metaLine(s: SessionMeta): string {
   return parts.join(' · ');
 }
 
+
+const styles = StyleSheet.create({
+  rackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: minTouch - 8,
+    paddingHorizontal: 14,
+    marginBottom: 4,
+    borderRadius: radius.pill,
+    ...squircle,
+  },
+});

@@ -10,6 +10,7 @@ import {
   Inter_700Bold,
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
+import { NotoSerifDisplay_600SemiBold } from '@expo-google-fonts/noto-serif-display';
 import { VoxaThemeProvider, useTheme } from '@/design/theme';
 import { EngineProvider } from '@/engines/provider';
 import { useStartupWarmUp } from '@/engines/warm-up';
@@ -33,6 +34,7 @@ function Root() {
         <Stack.Screen name="editor" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="engine-lab" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="session/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="library-v2" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="phrases" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="scan" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
@@ -73,6 +75,7 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
     Inter_800ExtraBold,
+    NotoSerifDisplay_600SemiBold,
   });
 
   useEffect(() => {

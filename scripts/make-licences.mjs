@@ -28,13 +28,14 @@ function licenceFile(dir) {
 const packages = names.sort().map((name) => {
   const dir = nm(name);
   const meta = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-  // The Inter package wraps the font: the font's own notice is in LICENSE_FONT.
-  const text = (name === '@expo-google-fonts/inter' ? readFileSync(join(dir, 'LICENSE_FONT'), 'utf8') : '') || licenceFile(dir) || '';
+  // Google Fonts packages wrap the font: the font's own notice is in LICENSE_FONT.
+  const font = name.startsWith('@expo-google-fonts/');
+  const text = (font ? readFileSync(join(dir, 'LICENSE_FONT'), 'utf8') : '') || licenceFile(dir) || '';
   const copyright = [...new Set(text.split('\n').map((l) => l.trim()).filter((l) => /^copyright\s+(\(c\)|©|\d|\[)/i.test(l)))];
   return {
     name,
     version: meta.version,
-    licence: name === '@expo-google-fonts/inter' ? 'OFL-1.1' : String(meta.license ?? 'Unknown'),
+    licence: font ? 'OFL-1.1' : String(meta.license ?? 'Unknown'),
     copyright: copyright.length ? copyright : [`${typeof meta.author === 'string' ? meta.author : (meta.author?.name ?? name)} and contributors`],
   };
 });

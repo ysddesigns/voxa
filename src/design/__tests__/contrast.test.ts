@@ -1,4 +1,4 @@
-import { dark, light, type Palette } from '../tokens';
+import { dark, light, rackDark, rackLight, type Palette } from '../tokens';
 
 /**
  * PRD accessibility rule: AA contrast. Text needs 4.5:1 against every surface it sits on;
@@ -42,5 +42,21 @@ describe.each([
   });
   it.each(marks)('%s marks on %s are at least 3:1', (fg, bg) => {
     expect(contrast(p[fg], p[bg])).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe.each([
+  ['light', rackLight],
+  ['dark', rackDark],
+])('%s rack', (_name, r) => {
+  it.each([
+    ['title', r.title, r.wall],
+    ['overline', r.overline, r.wall],
+    ['lip label', r.onLip, r.lip],
+  ])('%s text is at least 4.5:1', (_label, fg, bg) => {
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('wire marks are at least 3:1 on the wall', () => {
+    expect(contrast(r.wire, r.wall)).toBeGreaterThanOrEqual(3);
   });
 });
