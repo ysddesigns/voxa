@@ -14,6 +14,7 @@
 #
 # Settings by environment variable (defaults in brackets):
 #   GPUS [all visible]  EPOCHS [english 10, multilingual 20]  MAX_DURATION [600 seconds of audio a batch]
+#   USE_FP16 [1; 0 for full precision]
 #   BASE_LR [english 0.0045, multilingual 0.015]  MUSAN [0: no noise mixing, or 1 with musan_cuts in data/fbank]
 #   START_EPOCH [auto: one after the last epoch-N.pt in the experiment folder, so a run cut short
 #     (a Colab session ending) carries on where it stopped; a stage already finished is skipped]
@@ -35,6 +36,7 @@ source "$HERE/scripts/model_size.sh" "$SIZE"
 GPUS="${GPUS:-$(python -c 'import torch; print(torch.cuda.device_count())')}"
 MAX_DURATION="${MAX_DURATION:-600}"
 MUSAN="${MUSAN:-0}"
+USE_FP16="${USE_FP16:-1}"   # 0 trains in full precision: slower, for when fp16 gradients overflow
 EXP="$HERE/exp/$STAGE-$SIZE"
 
 case "$SIZE" in
@@ -142,7 +144,7 @@ set -x
   --manifest-dir "$HERE/data/fbank" \
   --keep-last-k "$KEEP_LAST_K" \
   --use-mux 0 \
-  --use-fp16 1 \
+  --use-fp16 "$USE_FP16" \
   --causal 1 \
   --chunk-size 16,32,64,-1 \
   --left-context-frames 64,128,256,-1 \
