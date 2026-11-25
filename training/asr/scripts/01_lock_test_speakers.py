@@ -8,6 +8,8 @@ Every later step reads it and keeps those speakers out of training.
 
 Speakers are picked by a stable hash of their id, so the same input always gives the same pick.
 Speakers named in --test-speakers (for example the Voxa test-set volunteers) are always test.
+A language with few speakers holds back at most --max-share of them for test and dev together (about
+15% test, 5% dev), so most of its voices are still trained on: 31 speakers give 5 test, 2 dev.
 FLEURS keeps its own splits and is not picked from.
 
   python scripts/01_lock_test_speakers.py \
@@ -40,6 +42,7 @@ def main() -> None:
     p.add_argument("--source", action="append", required=True, help="kind:path[:language], repeatable")
     p.add_argument("--test-per-language", type=int, default=30)
     p.add_argument("--dev-per-language", type=int, default=10)
+    p.add_argument("--max-share", type=float, default=0.2, help="most of a language's speakers held out (test + dev)")
     p.add_argument("--test-speakers", type=Path, help="a text file, one speaker id a line, always test")
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--force", action="store_true", help="rewrite an existing lock (breaks comparisons with old scores)")
@@ -64,8 +67,12 @@ def main() -> None:
         named = sorted(s for s in counts if s in fixed)
         # Speakers with very few clips say little about a model: prefer those with at least 5.
         pool = sorted((s for s in counts if s not in fixed and counts[s] >= 5), key=rank)
-        test = named + pool[: max(0, a.test_per_language - len(named))]
-        dev = pool[len(test) - len(named):][: a.dev_per_language]
+        # Three quarters of the held-out share for test, a quarter for dev; always one test speaker.
+        n = len(counts)
+        n_test = min(a.test_per_language, max(1, round(n * a.max_share * 0.75)))
+        n_dev = min(a.dev_per_language, round(n * a.max_share * 0.25))
+        test = named + pool[: max(0, n_test - len(named))]
+        dev = pool[len(test) - len(named):][:n_dev]
         lock["test"][lang] = test
         lock["dev"][lang] = dev
         left = len(counts) - len(test) - len(dev)

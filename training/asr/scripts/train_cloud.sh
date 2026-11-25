@@ -123,21 +123,28 @@ fi
 
 echo "==> Detected sources: ${SOURCES[*]}"
 
-# 4. Step 1: Lock Test Speakers (Splits)
+# 4. Step 1: Lock Test Speakers (Splits). The lock keeps scores comparable between training runs, so
+# it is fixed from the first checkpoint on. Before that nothing depends on it: it is redone each run,
+# which picks up datasets added since (and any change to how speakers are picked).
+LOCK_ARGS=()
+[ -f "$DATA_DIR/test-speakers.txt" ] && LOCK_ARGS=(--test-speakers "$DATA_DIR/test-speakers.txt")
 if [ ! -f "splits/speakers.json" ]; then
   echo "==> Step 1: Locking test speakers..."
-  LOCK_ARGS=()
-  [ -f "$DATA_DIR/test-speakers.txt" ] && LOCK_ARGS=(--test-speakers "$DATA_DIR/test-speakers.txt")
   python3 scripts/01_lock_test_speakers.py "${SOURCES[@]}" "${LOCK_ARGS[@]}"
+elif ! compgen -G "exp/*/epoch-*.pt" > /dev/null; then
+  echo "==> Step 1: No training yet, so the test speakers are picked again..."
+  python3 scripts/01_lock_test_speakers.py "${SOURCES[@]}" "${LOCK_ARGS[@]}" --force
 else
-  echo "==> Step 1: Using existing splits/speakers.json"
+  echo "==> Step 1: Using existing splits/speakers.json (fixed since training started)"
 fi
 
 # 5. Step 2: Prepare Manifests. Skipped when the sources have not changed since the last run; when
 # they have, features are recomputed too (step 5 otherwise keeps any it already has).
 STAMP="data/manifests/.sources"
 sources_state() {
-  # Each source, and the size of its file when it is one (a jsonl grows as fetch_data.py adds clips).
+  # The speaker lock, then each source and the size of its file when it is one (a jsonl grows as
+  # fetch_data.py adds clips).
+  sha256sum splits/speakers.json
   for s in "${SOURCES[@]}"; do
     echo "$s"
     f="${s#*:}"
