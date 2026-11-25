@@ -65,19 +65,40 @@ class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
     def _languages(self) -> list[str]:
         return [x.strip() for x in self.args.voxa_languages.split(",") if x.strip()]
 
+    def _path(self, split: str, lang: str) -> Path:
+        return self.args.manifest_dir / f"voxa_cuts_{split}_{lang}.jsonl.gz"
+
     def _cuts(self, split: str, lang: str) -> CutSet:
-        path = self.args.manifest_dir / f"voxa_cuts_{split}_{lang}.jsonl.gz"
+        path = self._path(split, lang)
         if not path.is_file():
             raise FileNotFoundError(f"{path} not found: run scripts 02 and 05 for {lang}")
         cuts = load_manifest_lazy(path)
         return cuts.map_supervisions(_upper) if self.args.voxa_upper else cuts
 
     def _count(self, split: str, lang: str) -> int:
-        with gzip.open(self.args.manifest_dir / f"voxa_cuts_{split}_{lang}.jsonl.gz", "rt") as f:
+        with gzip.open(self._path(split, lang), "rt") as f:
             return sum(1 for _ in f)
 
+    def _present(self, split: str) -> list[str]:
+        """
+        The chosen languages that have a set for this split. Code-switched sets (cs-*) may be missing:
+        joined clips (cs-ha-synth) have no dev or test, and early on real cs-ha recordings may only
+        exist as a test set. A missing single-language set is still an error.
+        """
+        out = []
+        for lang in self._languages():
+            if self._path(split, lang).is_file():
+                out.append(lang)
+            elif lang.startswith("cs-"):
+                logging.info(f"Voxa {split}: no {lang} set, skipped")
+            else:
+                raise FileNotFoundError(f"{self._path(split, lang)} not found: run scripts 02 and 05 for {lang}")
+        if not out:
+            raise FileNotFoundError(f"No Voxa {split} sets for {self.args.voxa_languages}")
+        return out
+
     def gigaspeech_subset_small_cuts(self) -> CutSet:
-        langs = self._languages()
+        langs = self._present("train")
         sets = [self._cuts("train", lang) for lang in langs]
         if len(sets) == 1:
             return sets[0]
@@ -93,7 +114,7 @@ class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
 
     def dev_clean_cuts(self) -> CutSet:
         out = None
-        for lang in self._languages():
+        for lang in self._present("dev"):
             cuts = self._cuts("dev", lang)
             out = cuts if out is None else out + cuts
         return out
@@ -103,7 +124,7 @@ class LibriSpeechAsrDataModule(_base.LibriSpeechAsrDataModule):
 
     def gigaspeech_dev_cuts(self) -> CutSet:
         out = None
-        for lang in self._languages():
+        for lang in self._present("dev"):
             cuts = self._cuts("dev", lang).subset(first=100)
             out = cuts if out is None else out + cuts
         return out

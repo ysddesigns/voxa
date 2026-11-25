@@ -1,7 +1,7 @@
 import { memoryFiles } from '@/storage/files';
 import { words } from '@/features/asr-compare/compare';
 import { DonationStore, nextPrompt, parseTakes, randomSpeaker, takePath, totalMs } from '../donations';
-import { PROMPTS } from '../prompts';
+import { HAUSA_MIX_PROMPTS, PIDGIN_MIX_PROMPTS, PROMPTS, promptsFor } from '../prompts';
 
 const store = (initial: Record<string, string> = {}) => {
   const files = memoryFiles(initial);
@@ -17,6 +17,24 @@ describe('prompts', () => {
 
   it('keeps every line short enough to read in one breath', () => {
     expect(PROMPTS.filter((p) => words(p.text).length > 14)).toEqual([]);
+  });
+
+  it('has mixed-language sets with their own ids and training language, under the same rules', () => {
+    const mixed = [...HAUSA_MIX_PROMPTS, ...PIDGIN_MIX_PROMPTS];
+    const ids = [...PROMPTS, ...mixed].map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(HAUSA_MIX_PROMPTS.every((p) => p.language === 'cs-ha' && p.id.startsWith('csha-'))).toBe(true);
+    expect(PIDGIN_MIX_PROMPTS.every((p) => p.language === 'cs-pcm' && p.id.startsWith('cspcm-'))).toBe(true);
+    expect(mixed.filter((p) => /\d/.test(p.text) || words(p.text).length > 14)).toEqual([]);
+    expect(HAUSA_MIX_PROMPTS.length).toBeGreaterThanOrEqual(40);
+    expect(PIDGIN_MIX_PROMPTS.length).toBeGreaterThanOrEqual(40);
+  });
+
+  it('alternates a mixed set with English so one voice records both', () => {
+    expect(promptsFor('en')).toEqual(PROMPTS);
+    const order = promptsFor('cs-ha');
+    expect(order.slice(0, 4).map((p) => p.id)).toEqual(['csha-001', 'en-001', 'csha-002', 'en-002']);
+    expect(order).toHaveLength(PROMPTS.length + HAUSA_MIX_PROMPTS.length);
   });
 });
 
@@ -46,9 +64,25 @@ describe('DonationStore', () => {
     expect((await s.discard('en-001')).map((t) => t.audio)).toEqual(['audio/en-002.wav']);
     expect(files.data.has(takePath('en-001'))).toBe(false);
     await s.agree(new Date('2026-11-23T10:00:00Z'));
-    expect(await s.consent()).toEqual({ version: 1, at: '2026-11-23T10:00:00.000Z' });
+    expect(await s.consent()).toEqual({ version: 2, at: '2026-11-23T10:00:00.000Z' });
     await s.deleteAll();
     expect([...files.data.keys()]).toEqual([]);
+    expect(await s.consent()).toBeNull();
+  });
+
+  it('records a mixed sentence under its training language and remembers the chosen set', async () => {
+    const { store: s, files } = store();
+    expect(await s.set()).toBe('en');
+    await s.chooseSet('cs-ha');
+    expect(await s.set()).toBe('cs-ha');
+    await s.save(HAUSA_MIX_PROMPTS[0], 4000);
+    const line = JSON.parse(files.data.get('donate/recordings.jsonl')!.trim());
+    expect(line).toMatchObject({ id: 'vx-test-csha-001', audio: 'audio/csha-001.wav', language: 'cs-ha' });
+    expect((await s.takes())[0].language).toBe('cs-ha');
+  });
+
+  it('reads a consent from before mixed sentences as not given', async () => {
+    const { store: s } = store({ 'donate/consent.json': JSON.stringify({ version: 1, at: '2026-11-23T10:00:00.000Z' }) });
     expect(await s.consent()).toBeNull();
   });
 

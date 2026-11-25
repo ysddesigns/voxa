@@ -8,8 +8,15 @@
  * - No real public figures, no politics, nothing a volunteer would mind saying.
  *
  * Ids are stable: never reuse or renumber one, only add new ones at the end.
+ *
+ * Besides plain English there are two mixed sets, read the way people really talk in meetings:
+ * Hausa and English in one sentence (the North), and Pidgin and English (the South). The training
+ * scripts keep them as their own sets (cs-ha, cs-pcm) because a model only learns to follow a switch
+ * inside a sentence from recordings that have one. The mixed lines need a check by native speakers
+ * before release: a volunteer who "corrects" a line while reading makes its transcript wrong.
  */
-export type Prompt = { id: string; text: string };
+export type PromptSet = 'en' | 'cs-ha' | 'cs-pcm';
+export type Prompt = { id: string; text: string; language: PromptSet };
 
 const LINES = [
   'Good morning, how was your night?',
@@ -165,4 +172,118 @@ const LINES = [
   'Thank you very much for your help today.',
 ];
 
-export const PROMPTS: Prompt[] = LINES.map((text, i) => ({ id: `en-${String(i + 1).padStart(3, '0')}`, text }));
+/** Hausa and English mixed, as in a meeting in Kano, Kaduna or Abuja. Same rules as LINES. */
+const HAUSA_MIX = [
+  'Ina kwana, please let us start the meeting yanzu.',
+  'To, abu na gaba on the agenda shine budget.',
+  'Kun ga, the report ɗin bai zo ba tukuna.',
+  'Wallahi the network is very bad a nan yau.',
+  'Don Allah ka turo min the document on WhatsApp.',
+  'Mun yi meeting da su jiya, amma they did not agree.',
+  'Ka san cewa the deadline is next Friday ko?',
+  'Ina so mu discuss the transport allowance kafin mu tashi.',
+  'Kai, this traffic ɗin ya yi yawa sosai.',
+  'Sai an sami approval daga ofishin director tukuna.',
+  'Muna buƙatar more volunteers for the health outreach.',
+  'To shikenan, let us meet again on Monday insha Allah.',
+  'Malam, the minutes of the last meeting suna ina?',
+  'Na kira shi sau uku but he did not pick.',
+  'The generator yana buƙatar fuel kafin yamma.',
+  'Ki gaya musu cewa the venue has changed.',
+  'Ya kamata mu rubuta proposal ɗin before the end of the month.',
+  'Kuɗin nan bai isa ba, we need to increase the budget.',
+  'Abin da nake cewa shine, communication is very important.',
+  'Please ku yi shiru, the chairman wants to speak.',
+  'Ban gane ba, can you explain it again a hankali?',
+  'Gobe za mu tafi Kaduna for the training workshop.',
+  'The students sun riga sun rubuta exam ɗin su.',
+  'Hajiya ta ce the food will be ready by one o clock.',
+  'Mu yi amfani da the new form daga yau.',
+  'Gaskiya, the price of fertiliser ya tashi sosai.',
+  'Shin, kowa ya sami copy na the agreement?',
+  'Ina ganin we should vote on this matter yanzu.',
+  'Akwai matsala da the projector, ba ya aiki.',
+  'Mun gode sosai, the meeting is now adjourned.',
+  'Ka tabbata ka saka sunanka a cikin the attendance list.',
+  'The doctor ya ce ta huta for one week.',
+  'Kar ka manta ka kawo receipt ɗin gobe.',
+  'Sun ce the contractor zai fara aiki next week.',
+  'Ni dai, I do not think wannan plan ɗin zai yi aiki.',
+  'Yanzu dai, let us move to the next point.',
+  'The school fees sun ƙaru a wannan term ɗin.',
+  'Ka aiko min location ɗin on WhatsApp please.',
+  'Kowa ya zo on time yau, ma sha Allah.',
+  'Idan kuna da question, ku tambaya yanzu.',
+];
+
+/** Pidgin and English mixed, as in a meeting in Lagos, Port Harcourt or Benin. Same rules as LINES. */
+const PIDGIN_MIX = [
+  'Abeg make we start the meeting, time don go.',
+  'Oga, the report never ready, but we go submit am tomorrow.',
+  'I no understand wetin you talk, please explain again.',
+  'Na true, the network for this area no dey work at all.',
+  'Make una send me the document before end of day.',
+  'We don discuss am, so let us move to the next item.',
+  'The money wey dem approve no reach for the project.',
+  'Abeg who get the minutes of the last meeting?',
+  'I dey come, just give me five minutes.',
+  'The client call me this morning, e no happy with the delay.',
+  'Wetin be the deadline for this proposal sef?',
+  'Make we no waste time, the chairman don arrive.',
+  'Dem say the venue don change to the second floor.',
+  'Light don go again, make una on the generator.',
+  'Honestly, this plan no go work if we no get funding.',
+  'Abeg reduce your voice small, people dey talk.',
+  'I go forward the invoice give you after the meeting.',
+  'The contractor talk say e go finish by next month.',
+  'Wetin happen? Why nobody bring the projector?',
+  'Make everybody sign the attendance list before you go.',
+  'No wahala, I go handle the logistics myself.',
+  'The traffic for Lekki today ehn, e no easy.',
+  'We need to vote, because we no fit agree like this.',
+  'Abeg the budget too high, we must cut am down.',
+  'Who go take the minutes today? Make person volunteer.',
+  'I don check the account, the payment never enter.',
+  'Make we pray first before we begin.',
+  'Oya, make we hear from the treasurer now.',
+  'Customer care people no dey pick call at all.',
+  'If una get any question, make una ask now.',
+  'The doctor say make she rest for one week.',
+  'This one na serious matter, we must report am.',
+  'Abeg send the location for WhatsApp, I don lost.',
+  'Thank you all for coming, we go meet next week.',
+  'Wetin we decide about the transport allowance?',
+  'Make sure say you carry your ID card come tomorrow.',
+  'E be like say the printer don spoil again.',
+  'The new staff go resume on Monday.',
+  'Na so the meeting end, nobody talk anything again.',
+  'Make una no vex, the delay no be my fault.',
+];
+
+const make = (lines: string[], prefix: string, language: PromptSet): Prompt[] =>
+  lines.map((text, i) => ({ id: `${prefix}-${String(i + 1).padStart(3, '0')}`, text, language }));
+
+export const PROMPTS: Prompt[] = make(LINES, 'en', 'en');
+export const HAUSA_MIX_PROMPTS: Prompt[] = make(HAUSA_MIX, 'csha', 'cs-ha');
+export const PIDGIN_MIX_PROMPTS: Prompt[] = make(PIDGIN_MIX, 'cspcm', 'cs-pcm');
+
+/** How a volunteer talks in meetings, as offered on the Donate screen. */
+export const PROMPT_SETS: { set: PromptSet; label: string; hint: string }[] = [
+  { set: 'en', label: 'English', hint: 'Sentences in Nigerian English' },
+  { set: 'cs-ha', label: 'English and Hausa', hint: 'Sentences that mix Hausa and English' },
+  { set: 'cs-pcm', label: 'English and Pidgin', hint: 'Sentences that mix Pidgin and English' },
+];
+
+/**
+ * The reading order for a set. A mixed set alternates with English, so one voice gives both, which
+ * is what the training scripts need to join same-voice clips and to keep test voices apart.
+ */
+export function promptsFor(set: PromptSet): Prompt[] {
+  const mixed = set === 'cs-ha' ? HAUSA_MIX_PROMPTS : set === 'cs-pcm' ? PIDGIN_MIX_PROMPTS : [];
+  const out: Prompt[] = [];
+  for (let i = 0; i < Math.max(mixed.length, PROMPTS.length); i++) {
+    if (i < mixed.length) out.push(mixed[i]);
+    if (i < PROMPTS.length) out.push(PROMPTS[i]);
+  }
+  return out;
+}

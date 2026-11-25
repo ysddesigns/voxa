@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Icon } from '@/components/icons';
-import { Button, Card, LargeTitle, NavBar, Page } from '@/components/ui';
+import { Button, Card, Group, LargeTitle, NavBar, Page } from '@/components/ui';
 import { useTheme } from '@/design/theme';
 import { minTouch, radius } from '@/design/tokens';
 import { type } from '@/design/type';
@@ -21,7 +21,7 @@ import {
   totalMs,
   type Take,
 } from '@/features/donate/donations';
-import { PROMPTS, type Prompt } from '@/features/donate/prompts';
+import { PROMPT_SETS, promptsFor, type Prompt, type PromptSet } from '@/features/donate/prompts';
 import { formatMB } from '@/features/packs/rules';
 import { deviceFiles } from '@/storage/device-files';
 import { VoxaEngine } from '../../modules/voxa-engine';
@@ -35,7 +35,8 @@ type Phase = 'loading' | 'consent' | 'ready' | 'recording' | 'saving' | 'sharing
 /**
  * Donate your voice: volunteers read short sentences aloud; the recordings stay on the phone until
  * the volunteer shares them as one zip file. They train Voxa's own listening model for Nigerian
- * English (training/asr).
+ * English (training/asr). Volunteers who mix Hausa or Pidgin with English in meetings read mixed
+ * sentences too, alternating with English: the recordings the model needs to follow a switch.
  */
 export default function DonateScreen() {
   const { colors } = useTheme();
@@ -49,17 +50,20 @@ export default function DonateScreen() {
   const [elapsed, setElapsed] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [last, setLast] = useState<Prompt | null>(null);
+  const [set, setSet] = useState<PromptSet>('en');
   const recordingFor = useRef<Prompt | null>(null);
 
-  const prompt = nextPrompt(PROMPTS, takes, skipped);
+  const prompts = useMemo(() => promptsFor(set), [set]);
+  const prompt = nextPrompt(prompts, takes, skipped);
   const recordedMs = totalMs(takes);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [consent, saved] = await Promise.all([donations.consent(), donations.takes()]);
+      const [consent, saved, chosen] = await Promise.all([donations.consent(), donations.takes(), donations.set()]);
       if (!alive) return;
       setTakes(saved);
+      setSet(chosen);
       if (consent) setSpeaker(await donations.speaker());
       if (alive) setPhase(consent ? 'ready' : 'consent');
     })().catch(() => alive && setPhase('consent'));
@@ -146,6 +150,12 @@ export default function DonateScreen() {
     }
   };
 
+  const choose = (next: PromptSet) => {
+    setSet(next);
+    setSkipped(new Set());
+    void donations.chooseSet(next).catch(() => null);
+  };
+
   const redoLast = async () => {
     if (!last) return;
     setTakes(await donations.discard(last.id));
@@ -220,6 +230,12 @@ export default function DonateScreen() {
               </View>
             </Card>
 
+            <Group header="How do you talk in meetings?" footer="Mixed sentences come in turn with English ones. Read each one exactly as written.">
+              {PROMPT_SETS.map((o) => (
+                <SetRow key={o.set} label={o.label} hint={o.hint} selected={o.set === set} disabled={busy || phase === 'recording'} onPress={() => choose(o.set)} />
+              ))}
+            </Group>
+
             {prompt ? (
               <Card>
                 <Text style={[type.footnote, { color: colors.textSecondary }]}>Read this aloud</Text>
@@ -291,7 +307,7 @@ export default function DonateScreen() {
 function Consent({ onAgree }: { onAgree: () => void }) {
   const { colors } = useTheme();
   const points = [
-    'You read short English sentences aloud. About twenty minutes in total, in as many sittings as you like.',
+    'You read short sentences aloud: in English, or mixing English with Hausa or Pidgin the way you talk in meetings. About twenty minutes in total, in as many sittings as you like.',
     'The recordings help Voxa understand Nigerian voices better, for everyone who uses it.',
     'Only your voice reading the sentence is kept. No name, no phone number, no location. You get a random volunteer code instead.',
     'Nothing leaves your phone until you tap Share and choose where to send it.',
@@ -319,7 +335,25 @@ function Consent({ onAgree }: { onAgree: () => void }) {
   );
 }
 
-
+function SetRow({ label, hint, selected, disabled, onPress }: { label: string; hint: string; selected: boolean; disabled: boolean; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, disabled }}
+      accessibilityLabel={`${label}. ${hint}`}
+      style={({ pressed }) => [styles.setRow, { opacity: disabled ? 0.4 : 1 }, pressed && { backgroundColor: colors.chipPressed }]}
+    >
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[type.body, { color: colors.text }]}>{label}</Text>
+        <Text style={[type.footnote, { color: colors.textSecondary }]}>{hint}</Text>
+      </View>
+      {selected ? <Icon name="check" size={20} color={colors.accent} /> : null}
+    </Pressable>
+  );
+}
 
 const minutes = (ms: number) => {
   const m = ms / 60000;
@@ -331,4 +365,5 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', borderRadius: radius.pill },
   actions: { flexDirection: 'row', gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: minTouch, paddingHorizontal: 16, paddingVertical: 10 },
 });

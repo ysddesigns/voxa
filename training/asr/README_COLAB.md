@@ -1,88 +1,40 @@
-# Training Voxa's Nigerian Multilingual Model on Cloud GPU (Colab / RunPod)
+# Training Voxa's listening model on Google Colab (or any cloud GPU)
 
-This guide walks through training Voxa's offline, on-device streaming Zipformer speech recognition model (**Nigerian English, Pidgin, Yoruba, Hausa, Igbo**) on an NVIDIA GPU instance.
+## Colab: use the notebook
 
-The output is an int8 ONNX pack (`listen-ng`) that drops directly into Voxa to replace Kroko.
+Open `Voxa_Nigerian_ASR_Training.ipynb` in Colab (File → Upload notebook), choose a T4 GPU, and
+run the cells from top to bottom. The notebook explains each step. In short, it:
 
----
+1. Installs k2 for whatever PyTorch Colab has (`scripts/colab_install.py`), then icefall and the
+   starting models (`setup.sh`).
+2. Downloads the data from Hugging Face one file at a time, as 16 kHz audio, capped at the hours
+   you choose (`scripts/fetch_data.py`):
+   - North: NaijaVoices Hausa, FLEURS Hausa, AfriSpeech-200 English with northern accents, Pidgin
+   - South: AfriSpeech-200 English with southern accents, Pidgin
+3. Adds your own recordings from Google Drive: Donate zips, transcribed meetings, `test-speakers.txt`.
+4. Prepares the data, then trains stage A (English and Pidgin) and stage B (the region model).
+5. Exports two packs, `listen-ng-<region>` (live captions) and `listen-ng-<region>-full` (after the
+   meeting), then scores them.
 
-## 1. Cloud Machine Requirements
+Checkpoints, the speaker lock, the word-piece vocabulary, packs and scores live in Google Drive.
+After a disconnect, run the cells again from the top: finished steps and epochs are skipped.
 
-* **GPU:** 1x NVIDIA A100 (40 GB / 80 GB) or RTX 4090 / 3090 (24 GB).
-* **OS:** Ubuntu 22.04 LTS.
-* **Disk:** ~100–200 GB SSD storage.
-* **Estimated Runtime:** ~4–8 hours for `small` model size.
+You need a Hugging Face token, and must accept the terms of NaijaVoices and AfriSpeech-200 on their
+pages. Both are non-commercial (CC BY-NC-SA).
 
----
-
-## 2. Fast Setup (Google Colab / RunPod)
-
-### Step 1: Clone Voxa and Enter Directory
-```bash
-git clone https://github.com/your-org/voxa.git
-cd voxa/voxa/training/asr
-```
-
-### Step 2: Install CUDA PyTorch & k2
-On Ubuntu / Colab (match your CUDA version, e.g. CUDA 12.1):
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install k2==1.24.4.dev20240223+cuda12.1.torch2.2.0 -f https://k2-fsa.github.io/k2/cuda.html
-```
-
-### Step 3: Run Setup
-```bash
-bash setup.sh
-source env.sh
-```
-
----
-
-## 3. Data Preparation with NaijaData
-
-Download **NaijaVoices** from the Explorer tier on [NaijaData](https://naijadata.vercel.app/dataset/naijavoices) and place under `data/raw/naijavoices/`:
+## Any other GPU machine (RunPod, Lambda, your own)
 
 ```bash
-mkdir -p data/raw/naijavoices
-# Extract downloads into:
-#   data/raw/naijavoices/ha (or metadata.csv)
-#   data/raw/naijavoices/yo
-#   data/raw/naijavoices/ig
+git clone --branch <branch> https://github.com/ysddesigns/voxa.git
+cd voxa/training/asr
+python scripts/colab_install.py          # k2 to match the installed PyTorch
+bash setup.sh && source env.sh
+export HF_TOKEN=...                      # after accepting the datasets' terms
+python scripts/fetch_data.py pidgin --out /workspace/data/fetched
+python scripts/fetch_data.py afrispeech --accents north --hours 40 --out /workspace/data/fetched
+python scripts/fetch_data.py naijavoices --language ha --hours 60 --out /workspace/data/fetched
+python scripts/fetch_data.py fleurs --code ha_ng --out /workspace/data/fleurs
+REGION=north MODEL_SIZE=small DATA_DIR=/workspace/data KEEP_EPOCHS=4 bash scripts/train_cloud.sh
 ```
 
-Optional: Download **Common Voice Nigerian English**:
-```bash
-# Extract into data/raw/cv-en
-```
-
----
-
-## 4. Run Automated End-to-End Training
-
-Run the cloud trainer:
-```bash
-DATA_DIR=data/raw MODEL_SIZE=small bash scripts/train_cloud.sh
-```
-
-What this script automates:
-1. **Speaker Split Locking (`01_lock_test_speakers.py`):** Ensures clean dev/test evaluation splits.
-2. **Lhotse Manifest Creation (`02_prepare.py`):** Normalizes transcripts and discards corrupt/short audio.
-3. **Multilingual BPE Tokenizer (`04_train_bpe.py`):** Generates shared 2,000-token subwords across all 5 languages.
-4. **Fbank Computation (`05_compute_fbank.py`):** Computes 80-band filterbank features with speed perturbation (0.9x, 1.1x).
-5. **Stage A Fine-tuning (`06_finetune.sh`):** Fine-tunes Zipformer transducer on Nigerian English & Pidgin.
-6. **Stage B Multilingual Fine-tuning:** Transfers learned acoustic encoder and trains on Yoruba, Hausa, Igbo, Pidgin, and English.
-7. **Export to int8 ONNX (`07_export.sh`):** Quantizes and exports `encoder.onnx`, `decoder.onnx`, `joiner.onnx`, `tokens.txt`, and `silero_vad.onnx`.
-8. **Evaluation (`08_score.py`):** Measures final Word Error Rate (WER) per language.
-
----
-
-## 5. Integrating the Trained Model into Voxa
-
-The script outputs the finished pack into `packs/listen-ng/`.
-
-1. **Local Test:** Drop the `packs/listen-ng` folder into your phone's Voxa files directory or test it directly in **Engine Lab** (`AsrCompareCard`).
-2. **Production Release:** Upload `packs/listen-ng` to your CDN/Hugging Face repository and update the URL and checksums in `src/features/packs/catalogue.ts`:
-   ```typescript
-   export const LISTEN_PACK_NG = 'listen-ng';
-   ```
-Voxa's native engine (`VoxaEngineModule.kt`) automatically detects and uses `listen-ng` when installed!
+On a 24 GB or larger card, set `MAX_DURATION=600`. Every step is described in `README.md`.

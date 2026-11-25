@@ -14,6 +14,11 @@ Each language's text is repeated up to --balance times its share, so a language 
 text still gets its own pieces instead of being spelled out letter by letter.
 
   python scripts/04_train_bpe.py --vocab-size 2000
+  python scripts/04_train_bpe.py --vocab-size 2000 --languages en,pcm,ha,cs-ha --out data/lang_bpe_north_2000
+
+A region model (06_finetune.sh north) learns pieces only from its own languages, so a small model
+spends none of its vocabulary on Yoruba or Igbo it will never hear. Joined clips (step 2b) are
+always left out: their text repeats the single-language sets.
 """
 
 from __future__ import annotations
@@ -33,14 +38,19 @@ def main() -> None:
     p.add_argument("--manifests", type=Path, default=Path("data/manifests"))
     p.add_argument("--vocab-size", type=int, default=2000)
     p.add_argument("--balance", type=int, default=5, help="largest repeat for a low-text language")
+    p.add_argument("--languages", help="comma-separated sets to learn from (default: every training set)")
     p.add_argument("--out", type=Path)
     a = p.parse_args()
     out = a.out or Path(f"data/lang_bpe_{a.vocab_size}")
     out.mkdir(parents=True, exist_ok=True)
+    wanted = {x.strip() for x in a.languages.split(",") if x.strip()} if a.languages else None
 
     lines: dict[str, list[str]] = defaultdict(list)
     for path in sorted(a.manifests.glob("voxa_cuts_train_*.jsonl.gz")):
         lang = path.name.removeprefix("voxa_cuts_train_").removesuffix(".jsonl.gz")
+        # Joined clips (step 2b) only repeat text the single-language sets already have.
+        if lang.endswith("-synth") or (wanted is not None and lang not in wanted):
+            continue
         with gzip.open(path, "rt", encoding="utf-8") as f:
             for line in f:
                 for s in json.loads(line)["supervisions"]:

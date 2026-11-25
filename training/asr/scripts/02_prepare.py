@@ -43,6 +43,12 @@ def split_of(u: Utterance, lock: dict) -> str:
         return "test"
     if u.speaker in lock["dev"].get(u.language, ()):
         return "dev"
+    # A voice held out in one language is held out in all. A volunteer locked into the code-switched
+    # test set who also read English prompts must not reach training through those.
+    if any(u.speaker in s for s in lock["test"].values()):
+        return "test"
+    if any(u.speaker in s for s in lock["dev"].values()):
+        return "dev"
     return "train"
 
 

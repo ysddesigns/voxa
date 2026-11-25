@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from voxa_asr.normalize import has_digits, normalize  # noqa: E402
-from voxa_asr.sources import LANGUAGES  # noqa: E402
+from voxa_asr.sources import LANGUAGES, sniff_delimiter  # noqa: E402
 
 LANG_MAP = {
     "hausa": "ha",
@@ -57,12 +57,12 @@ def cmd_naijavoices(args: argparse.Namespace) -> None:
     if not meta_path.is_file():
         sys.exit(f"Metadata file not found: {meta_path}")
 
-    delimiter = "\t" if meta_path.suffix == ".tsv" else ","
+    delimiter = sniff_delimiter(meta_path)
     valid_count = 0
     dropped_count = 0
 
     with meta_path.open(encoding="utf-8", newline="") as f_in, out_path.open("w", encoding="utf-8") as f_out:
-        reader = csv.DictReader(f_in, delimiter=delimiter)
+        reader = csv.DictReader(f_in, delimiter=delimiter, quoting=csv.QUOTE_NONE if delimiter == "~" else csv.QUOTE_MINIMAL)
         for i, row in enumerate(reader, 1):
             # Resolve audio file
             audio_rel = row.get("audio") or row.get("file_name") or row.get("path") or f"{i}.wav"

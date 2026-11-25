@@ -76,3 +76,27 @@ def test_naijavoices_source_reads_csv_metadata_and_resolves_audio():
         assert rows[0].duration == 2.5
         assert rows[0].audio == (folder / "clip_01.wav").resolve()
         assert rows[0].source == "naijavoices"
+
+
+def test_naijavoices_compressed_metadata_is_tilde_separated_and_holds_every_language():
+    # The layout of naijavoices-dataset-compressed: one metadata.csv, "~" between columns.
+    with tempfile.TemporaryDirectory() as d:
+        folder = Path(d)
+        (folder / "metadata.csv").write_text(
+            "audio~text~speaker_id~language~age_bracket~gender\n"
+            'a1.wav~Ina kwana, yaya "aiki"?~spk-h1~hausa~25-34~female\n'
+            "a2.wav~Bawo ni~spk-y1~yoruba~18-24~male\n"
+            "a3.wav~Sannu da zuwa~spk-h2~Hausa~35-44~male\n",
+            encoding="utf-8",
+        )
+        rows = list(read_source(f"naijavoices:{folder}:ha"))
+        assert [r.text for r in rows] == ['Ina kwana, yaya "aiki"?', "Sannu da zuwa"]
+        assert [r.speaker for r in rows] == ["spk-h1", "spk-h2"]
+        assert all(r.language == "ha" for r in rows)
+        assert [r.text for r in read_source(f"naijavoices:{folder}:yo")] == ["Bawo ni"]
+        try:
+            list(read_source(f"naijavoices:{folder}:ig"))
+        except ValueError as e:
+            assert "hausa" in str(e) and "yoruba" in str(e)
+        else:
+            raise AssertionError("expected a ValueError naming the languages found")

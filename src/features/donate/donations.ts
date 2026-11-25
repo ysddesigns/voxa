@@ -1,5 +1,5 @@
 import type { Files } from '@/storage/files';
-import type { Prompt } from './prompts';
+import type { Prompt, PromptSet } from './prompts';
 
 /**
  * Donated recordings, kept on this phone until the volunteer shares them. The folder is laid out
@@ -8,6 +8,7 @@ import type { Prompt } from './prompts';
  *   donate/recordings.jsonl   one line per recording: {id, audio, text, speaker, language, recordedMs}
  *   donate/audio/<prompt>.wav 16 kHz 16-bit mono
  *   donate/consent.json       what the volunteer agreed to, and when
+ *   donate/set.txt            which sentences they read: en, cs-ha (Hausa and English) or cs-pcm
  *
  * The speaker id is random and holds no name, so recordings from one phone stay together (which
  * keeps test speakers out of training) without saying who recorded them.
@@ -17,13 +18,16 @@ export const SHARE_DIR = 'donate-share';
 const MANIFEST = `${DONATE_DIR}/recordings.jsonl`;
 const SPEAKER = `${DONATE_DIR}/speaker.txt`;
 const CONSENT = `${DONATE_DIR}/consent.json`;
+const SET = `${DONATE_DIR}/set.txt`;
+const SETS: readonly PromptSet[] = ['en', 'cs-ha', 'cs-pcm'];
+const isSet = (v: unknown): v is PromptSet => typeof v === 'string' && (SETS as readonly string[]).includes(v);
 
 /** Recordings shorter than this are almost always a mis-tap. */
 export const MIN_TAKE_MS = 1000;
 /** About twenty minutes of reading. */
 export const GOAL_MS = 20 * 60 * 1000;
-/** Version of the consent wording; bump it when the wording changes. */
-export const CONSENT_VERSION = 1;
+/** Version of the consent wording; bump it when the wording changes. 2: mixed-language sentences. */
+export const CONSENT_VERSION = 2;
 
 export type Take = {
   id: string;
@@ -31,7 +35,8 @@ export type Take = {
   audio: string;
   text: string;
   speaker: string;
-  language: 'en';
+  /** The training scripts' language code: en, or cs-ha / cs-pcm for a mixed sentence. */
+  language: PromptSet;
   recordedMs: number;
 };
 
@@ -56,7 +61,7 @@ export function parseTakes(text: string | null): Take[] {
           audio: row.audio,
           text: row.text,
           speaker: row.speaker,
-          language: 'en',
+          language: isSet(row.language) ? row.language : 'en',
           recordedMs: Number(row.recordedMs) || 0,
         });
       }
@@ -113,6 +118,16 @@ export class DonationStore {
     return c;
   }
 
+  /** The sentences this volunteer chose to read. English until they pick another. */
+  async set(): Promise<PromptSet> {
+    const saved = (await this.files.read(SET))?.trim();
+    return isSet(saved) ? saved : 'en';
+  }
+
+  async chooseSet(set: PromptSet): Promise<void> {
+    await this.files.write(SET, set);
+  }
+
   async takes(): Promise<Take[]> {
     return parseTakes(await this.files.read(MANIFEST));
   }
@@ -125,7 +140,7 @@ export class DonationStore {
       audio: `audio/${prompt.id}.wav`,
       text: prompt.text,
       speaker,
-      language: 'en',
+      language: prompt.language,
       recordedMs: Math.round(recordedMs),
     };
     const takes = (await this.takes()).filter((t) => t.audio !== take.audio);

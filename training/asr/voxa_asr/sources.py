@@ -15,17 +15,30 @@ Readers:
     (the whole file). "text" may be empty for audio waiting for teacher labels.
 
 Languages use these codes everywhere: en (Nigerian English), pcm (Pidgin), ha, yo, ig.
+
+Code-switched speech, where one utterance mixes a local language with English the way people
+talk in meetings, has its own codes: cs-ha (Hausa and English, the North), cs-pcm (Pidgin and
+English, the South), cs-yo and cs-ig. They are kept apart from the single-language sets so the
+speaker lock gives them their own test speakers and step 8 scores them on their own.
 """
 
 from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
 
 LANGUAGES = ("en", "pcm", "ha", "yo", "ig")
+CODESWITCH = ("cs-ha", "cs-pcm", "cs-yo", "cs-ig")
+ALL_LANGUAGES = LANGUAGES + CODESWITCH
+
+
+def local_language(code: str) -> str:
+    """The local language a code-switched set mixes with English ("cs-ha" -> "ha"); others unchanged."""
+    return code.removeprefix("cs-")
 
 
 @dataclass
@@ -43,8 +56,8 @@ class Utterance:
 
 
 def check_language(language: str) -> str:
-    if language not in LANGUAGES:
-        raise ValueError(f"Unknown language {language!r}: use one of {', '.join(LANGUAGES)}")
+    if language not in ALL_LANGUAGES:
+        raise ValueError(f"Unknown language {language!r}: use one of {', '.join(ALL_LANGUAGES)}")
     return language
 
 
@@ -113,10 +126,39 @@ def read_fleurs(folder: Path, language: str) -> Iterator[Utterance]:
         raise FileNotFoundError(f"No train.tsv, dev.tsv or test.tsv in {folder}")
 
 
+LANGUAGE_NAMES = {
+    "hausa": "ha", "yoruba": "yo", "igbo": "ig", "pidgin": "pcm", "nigerian pidgin": "pcm",
+    "english": "en", "nigerian english": "en",
+}
+
+
+def language_code(value: str) -> str:
+    """"Hausa", "hausa" or "ha" -> "ha". Unknown names come back lower-cased."""
+    v = value.strip().lower()
+    return LANGUAGE_NAMES.get(v, v)
+
+
+def sniff_delimiter(path: Path) -> str:
+    """
+    The separator a metadata file uses, from its header line. NaijaVoices' metadata.csv is separated
+    by "~" (its card reads it with sep='~'), not by commas, despite the name.
+    """
+    with path.open(encoding="utf-8", newline="") as f:
+        header = f.readline()
+    counts = {d: header.count(d) for d in ("~", "\t", ",", "|")}
+    best = max(counts, key=counts.get)
+    return best if counts[best] else ("\t" if path.suffix == ".tsv" else ",")
+
+
 def read_naijavoices(folder_or_file: Path, language: str) -> Iterator[Utterance]:
     """
-    NaijaVoices (naijadata.vercel.app / Hugging Face): CSV/TSV metadata or directory.
-    Columns: audio/file_name/path, text/sentence/transcript, speaker/speaker_id.
+    NaijaVoices (Hugging Face naijavoices/naijavoices-dataset-compressed, or naijadata.vercel.app):
+    a metadata file or the folder holding it, with the audio beside it or in audio/.
+    Columns: audio/file_name/path, text/sentence/transcript, speaker/speaker_id, language.
+
+    The compressed download has one metadata.csv for Hausa, Yoruba and Igbo together. When rows
+    carry a language, only those in `language` are kept, so the same file can be passed once per
+    language (naijavoices:/data/nv:ha, naijavoices:/data/nv:yo).
     """
     language = check_language(language)
     if folder_or_file.is_file():
@@ -135,10 +177,19 @@ def read_naijavoices(folder_or_file: Path, language: str) -> Iterator[Utterance]
         meta_file = found
         audio_dir = folder_or_file / "audio" if (folder_or_file / "audio").is_dir() else folder_or_file
 
-    delimiter = "\t" if meta_file.suffix == ".tsv" else ","
+    kept = 0
+    others: Counter = Counter()
     with meta_file.open(encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f, delimiter=delimiter)
+        delimiter = sniff_delimiter(meta_file)
+        # No quote handling for "~" files: a stray quote mark in one transcript would swallow the rows after it.
+        quoting = csv.QUOTE_NONE if delimiter == "~" else csv.QUOTE_MINIMAL
+        reader = csv.DictReader(f, delimiter=delimiter, quoting=quoting)
         for i, row in enumerate(reader, 1):
+            row_language = (row.get("language") or row.get("lang") or "").strip()
+            if row_language and language_code(row_language) != language:
+                others[row_language] += 1
+                continue
+            kept += 1
             clip = row.get("audio") or row.get("file_name") or row.get("path") or f"{i}.wav"
             audio_path = (audio_dir / clip).resolve()
             text = row.get("text") or row.get("sentence") or row.get("transcript") or ""
@@ -158,6 +209,11 @@ def read_naijavoices(folder_or_file: Path, language: str) -> Iterator[Utterance]
                 source="naijavoices",
                 duration=duration,
             )
+    if not kept and others:
+        raise ValueError(
+            f"{meta_file}: no rows in {language!r}; the language column holds {', '.join(sorted(others))}. "
+            "Add the name to LANGUAGE_NAMES in voxa_asr/sources.py if it is one of ours."
+        )
 
 
 def read_jsonl(path: Path, language: Optional[str] = None, source: Optional[str] = None) -> Iterator[Utterance]:
@@ -196,7 +252,7 @@ def read_source(spec: str) -> Iterator[Utterance]:
     kind, _, rest = spec.partition(":")
     # The language, when given, is the last ":" part; paths may contain ":" themselves (C:\...).
     head, _, tail = rest.rpartition(":")
-    path, language = (Path(head), tail) if head and tail in LANGUAGES else (Path(rest), "")
+    path, language = (Path(head), tail) if head and tail in ALL_LANGUAGES else (Path(rest), "")
     if kind == "commonvoice":
         return read_commonvoice(path, language)
     if kind == "commonvoice-ng":

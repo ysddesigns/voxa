@@ -9,11 +9,16 @@
 # with: about 0.32 s of delay. The encoder and joiner are int8; the decoder stays float, as in the
 # app's current packs, because it is tiny and int8 costs it accuracy.
 #
+# CHUNK and LEFT (environment) export the same model with a longer look-ahead for the after-meeting
+# pass, which re-reads the saved recording and has no need to keep up with speech:
+#   CHUNK=64 LEFT=256 bash scripts/07_export.sh north medium 20 3   -> packs/north-medium-e20-avg3-c64
+# Training mixed chunk sizes (16 up to full context), so one checkpoint serves both.
+#
 # It ends by printing the files' checksums and sizes as a catalogue entry for
 # src/features/packs/catalogue.ts, to test the model as a lab pack in the Engine lab.
 set -euo pipefail
 
-STAGE="${1:?english or multilingual}"
+STAGE="${1:?english, south, north or multilingual}"
 SIZE="${2:?medium or small}"
 EPOCH="${3:?last epoch}"
 AVG="${4:-3}"
@@ -22,12 +27,16 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 source "$HERE/scripts/model_size.sh" "$SIZE"
 
 EXP="$HERE/exp/$STAGE-$SIZE"
+CHUNK="${CHUNK:-16}"
+LEFT="${LEFT:-128}"
 case "$STAGE" in
-  english) TOKENS="$HERE/base/$SIZE/data/lang_bpe_500/tokens.txt" ;;
+  english|south) TOKENS="$HERE/base/$SIZE/data/lang_bpe_500/tokens.txt" ;;
+  north) TOKENS="$HERE/data/lang_bpe_north_${VOCAB:-2000}/tokens.txt" ;;
   multilingual) TOKENS="$HERE/data/lang_bpe_${VOCAB:-2000}/tokens.txt" ;;
-  *) echo "stage must be english or multilingual"; exit 1 ;;
+  *) echo "stage must be english, south, north or multilingual"; exit 1 ;;
 esac
 NAME="$STAGE-$SIZE-e$EPOCH-avg$AVG"
+[ "$CHUNK" = 16 ] || NAME="$NAME-c$CHUNK"
 OUT="$HERE/packs/$NAME"
 
 cd "$ICEFALL_ASR_DIR"
@@ -38,12 +47,12 @@ cd "$ICEFALL_ASR_DIR"
   --avg "$AVG" \
   --use-averaged-model 1 \
   --causal True \
-  --chunk-size 16 \
-  --left-context-frames 128 \
+  --chunk-size "$CHUNK" \
+  --left-context-frames "$LEFT" \
   --enable-int8-quantization 1 \
   "${SIZE_ARGS[@]}"
 
-SUFFIX="epoch-$EPOCH-avg-$AVG-chunk-16-left-128"
+SUFFIX="epoch-$EPOCH-avg-$AVG-chunk-$CHUNK-left-$LEFT"
 mkdir -p "$OUT"
 cp "$EXP/encoder-$SUFFIX.int8.onnx" "$OUT/encoder.onnx"
 cp "$EXP/decoder-$SUFFIX.onnx"      "$OUT/decoder.onnx"
